@@ -1,0 +1,126 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - POSTGRES_HOST=postgres
+      - TIMESCALE_HOST=timescale
+      - REDIS_HOST=redis
+      - KAFKA_BROKERS=kafka:9092
+    depends_on:
+      - postgres
+      - timescale
+      - redis
+      - kafka  
+    restart: unless-stopped
+    networks:
+      - codetime-network
+
+  worker:
+    build: .
+    command: node src/workers/heartbeatWorker.js
+    environment:
+      - NODE_ENV=production
+      - TIMESCALE_HOST=timescale
+      - KAFKA_BROKERS=kafka:9092
+    depends_on:
+      - timescale
+      - kafka
+    restart: unless-stopped
+    networks:
+      - codetime-network
+
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      - POSTGRES_DB=codetime
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=your_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - codetime-network
+
+  timescale:
+    image: timescale/timescaledb:latest-pg14
+    environment:
+      - POSTGRES_DB=codetime_timeseries
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=your_password
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    networks:
+      - codetime-network
+
+  redis:
+    image: redislabs/rebloom:latest
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - codetime-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.0
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    networks:
+      - codetime-network
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.0
+    environment:
+      - ZOOKEEPER_CLIENT_PORT=2181
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    networks:
+      - codetime-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - codetime-network
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=your_password
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - codetime-network
+
+volumes:
+  postgres_data:
+  timescale_data:
+  redis_data:
+  zookeeper_data:
+  grafana_data:
+
+networks:
+  codetime-network:
+    driver: bridge 

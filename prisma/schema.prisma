@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             Int            @id @default(autoincrement())
+  username       String         @unique
+  email          String         @unique
+  passwordHash   String
+  app_name       String
+  profile_url    String
+  isPrivate       Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  projects       Project[]
+  heartbeats     Heartbeat[]
+  codingSessions CodingSession[]
+  dailySummaries DailySummary[]
+}
+
+model Project {
+  id             Int            @id @default(autoincrement())
+  user           User           @relation(fields: [userId], references: [id])
+  userId         Int
+  name           String
+  description    String?
+  repositoryUrl  String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @default(now())
+  heartbeats     Heartbeat[]
+  codingSessions CodingSession[]
+  dailySummaries DailySummary[]
+}
+
+model Editor {
+  id           Int         @id @default(autoincrement())
+  name         String
+  version      String?
+  otherDetails Json?
+  heartbeats   Heartbeat[]
+}
+
+model Language {
+  id           Int         @id @default(autoincrement())
+  name         String
+  version      String?
+  otherDetails Json?
+  heartbeats   Heartbeat[]
+}
+
+model Heartbeat {
+  id         Int       @id @default(autoincrement())
+  user       User      @relation(fields: [userId], references: [id])
+  userId     Int
+  project    Project?  @relation(fields: [projectId], references: [id])
+  projectId  Int?
+  editor     Editor?   @relation(fields: [editorId], references: [id])
+  editorId   Int?
+  language   Language? @relation(fields: [languageId], references: [id])
+  languageId Int?
+  timestamp  DateTime
+  duration   Decimal   @db.Decimal(10, 2)  // Used if we want to precompute small durations
+  eventType  String
+  metadata   Json?
+  
+  @@index([userId, timestamp])  // Efficient queries for a user’s heartbeats over time
+}
+
+model CodingSession {
+  id         Int       @id @default(autoincrement())
+  user       User      @relation(fields: [userId], references: [id])
+  userId     Int
+  project    Project?  @relation(fields: [projectId], references: [id])
+  projectId  Int?
+  startTime  DateTime
+  endTime    DateTime
+  duration   Int       // In minutes
+  
+  @@index([userId, startTime]) // Optimize queries for user sessions
+}
+
+model DailySummary {
+  id           Int       @id @default(autoincrement())
+  user         User      @relation(fields: [userId], references: [id])
+  userId       Int
+  project      Project?  @relation(fields: [projectId], references: [id])
+  projectId    Int?
+  summaryDate  DateTime
+  totalDuration Decimal   @db.Decimal(10, 2)
+  totalEvents Int
+
+  @@unique([userId, projectId, summaryDate]) // Avoid duplicate summaries
+}
