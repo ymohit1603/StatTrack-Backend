@@ -1,10 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../config/db');
 const { authenticateUser } = require('../middleware/auth');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
 
 // Get user preferences
 router.get('/', authenticateUser, async (req, res) => {

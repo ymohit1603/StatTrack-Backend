@@ -5,7 +5,7 @@ const { authenticateUser } = require('../middleware/auth');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const logger = require('../utils/logger');
 const { TIER_LIMITS } = require('../middleware/tierLimits');
-const redis = require('../utils/redis');
+const { redis } = require('../config/db');
 
 const prisma = new PrismaClient();
 

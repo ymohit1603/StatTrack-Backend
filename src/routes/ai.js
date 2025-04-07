@@ -6,10 +6,8 @@ const logger = require('../utils/logger');
 
 const prisma = new PrismaClient();
 
-// Get AI-powered productivity predictions
 router.get('/predictions/productivity', authenticateUser, async (req, res) => {
   try {
-    // Get historical data for ML model
     const historicalData = await prisma.$queryRaw`
       WITH daily_stats AS (
         SELECT 
@@ -39,7 +37,6 @@ router.get('/predictions/productivity', authenticateUser, async (req, res) => {
       ORDER BY date, hour
     `;
 
-    // AI-powered predictions
     const predictions = {
       optimal_coding_times: analyzeOptimalCodingTimes(historicalData),
       productivity_forecast: generateProductivityForecast(historicalData),
@@ -49,205 +46,161 @@ router.get('/predictions/productivity', authenticateUser, async (req, res) => {
 
     res.json({ data: predictions });
   } catch (error) {
-    logger.error('Error generating AI predictions:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    logger.error('Error generating productivity predictions:', error);
+    res.status(500).json({ error: 'Failed to generate predictions' });
   }
 });
 
-// Get AI-powered code quality insights
-router.get('/insights/code-quality', authenticateUser, async (req, res) => {
-  try {
-    const codeMetrics = await prisma.$queryRaw`
-      SELECT 
-        h.language,
-        h.entity,
-        h.lines,
-        COUNT(*) as edit_frequency,
-        COUNT(DISTINCT DATE(h.timestamp)) as days_modified
-      FROM Heartbeat h
-      WHERE h.userId = ${req.user.id}
-        AND h.timestamp >= NOW() - INTERVAL '30 days'
-      GROUP BY h.language, h.entity, h.lines
-      HAVING COUNT(*) > 5
-    `;
-
-    const insights = {
-      code_complexity: analyzeCodeComplexity(codeMetrics),
-      refactoring_opportunities: identifyRefactoringNeeds(codeMetrics),
-      best_practices: generateBestPractices(codeMetrics),
-      technical_debt: assessTechnicalDebt(codeMetrics)
-    };
-
-    res.json({ data: insights });
-  } catch (error) {
-    logger.error('Error generating code quality insights:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get AI-powered team optimization suggestions
-router.get('/insights/team', authenticateUser, async (req, res) => {
-  try {
-    const teamData = await prisma.$queryRaw`
-      WITH team_metrics AS (
-        SELECT 
-          u.id,
-          u.username,
-          h.language,
-          COUNT(*) as activity_count,
-          COUNT(DISTINCT h.entity) as files_touched,
-          SUM(h.duration) as coding_time
-        FROM "User" u
-        JOIN Heartbeat h ON h.userId = u.id
-        WHERE h.timestamp >= NOW() - INTERVAL '30 days'
-        GROUP BY u.id, u.username, h.language
-      )
-      SELECT *
-      FROM team_metrics
-      ORDER BY coding_time DESC
-    `;
-
-    const insights = {
-      team_composition: analyzeTeamComposition(teamData),
-      skill_distribution: analyzeSkillDistribution(teamData),
-      collaboration_suggestions: generateCollaborationSuggestions(teamData),
-      hiring_recommendations: generateHiringRecommendations(teamData)
-    };
-
-    res.json({ data: insights });
-  } catch (error) {
-    logger.error('Error generating team insights:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get AI-powered project success predictions
 router.get('/predictions/projects', authenticateUser, async (req, res) => {
   try {
     const projectMetrics = await prisma.$queryRaw`
       SELECT 
         p.id,
         p.name,
-        COUNT(DISTINCT h.userId) as team_size,
-        COUNT(DISTINCT h.entity) as codebase_size,
-        COUNT(DISTINCT h.language) as language_count,
-        SUM(h.duration) as total_effort,
-        MAX(h.timestamp) - MIN(h.timestamp) as project_duration
+        COUNT(DISTINCT h.entity) as files_modified,
+        COUNT(DISTINCT h.branch) as branches,
+        COUNT(DISTINCT h.language) as languages,
+        AVG(h.lines) as avg_lines_per_file,
+        MAX(h.lines) as max_lines,
+        COUNT(DISTINCT h.userId) as contributors,
+        SUM(h.duration) as total_time
       FROM Project p
-      JOIN Heartbeat h ON h.projectId = p.id
+      LEFT JOIN Heartbeat h ON h.projectId = p.id
+      WHERE p.userId = ${req.user.id}
+        AND h.timestamp >= NOW() - INTERVAL '30 days'
       GROUP BY p.id, p.name
     `;
 
-    const predictions = {
-      success_probability: calculateProjectSuccessProbability(projectMetrics),
-      risk_factors: identifyProjectRiskFactors(projectMetrics),
-      resource_optimization: suggestResourceOptimization(projectMetrics),
-      timeline_predictions: predictProjectTimelines(projectMetrics)
-    };
+    const projectPredictions = projectMetrics.map(metrics => ({
+      project_id: metrics.id,
+      project_name: metrics.name,
+      complexity_score: analyzeCodeComplexity(metrics),
+      refactoring_needs: identifyRefactoringNeeds(metrics),
+      team_composition: analyzeTeamComposition(metrics),
+      success_probability: calculateProjectSuccessProbability(metrics)
+    }));
 
-    res.json({ data: predictions });
+    res.json({ data: projectPredictions });
   } catch (error) {
     logger.error('Error generating project predictions:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to generate predictions' });
   }
 });
 
-// Helper functions for AI analysis
 function analyzeOptimalCodingTimes(data) {
-  // Advanced ML algorithm to identify optimal coding times
-  const patterns = data.reduce((acc, d) => {
-    const key = `${d.day_of_week}_${d.time_category}`;
+  const timeAnalysis = data.reduce((acc, entry) => {
+    const key = `${entry.day_of_week}-${entry.time_category}`;
     if (!acc[key]) {
-      acc[key] = { total_seconds: 0, count: 0 };
+      acc[key] = {
+        activity_count: 0,
+        total_seconds: 0,
+        files_modified: 0,
+        count: 0
+      };
     }
-    acc[key].total_seconds += d.total_seconds;
+    acc[key].activity_count += entry.activity_count;
+    acc[key].total_seconds += entry.total_seconds;
+    acc[key].files_modified += entry.files_modified;
     acc[key].count += 1;
     return acc;
   }, {});
 
-  return Object.entries(patterns)
-    .map(([key, value]) => ({
+  return Object.entries(timeAnalysis)
+    .map(([key, stats]) => ({
       time_slot: key,
-      productivity_score: value.total_seconds / value.count,
-      confidence: Math.min(value.count / 30, 1) // Confidence based on data points
+      productivity_score: (stats.activity_count / stats.count) * 
+        (stats.files_modified / stats.count) * 
+        (stats.total_seconds / stats.count)
     }))
     .sort((a, b) => b.productivity_score - a.productivity_score);
 }
 
 function generateProductivityForecast(data) {
-  // Time series analysis for productivity forecasting
-  const trend = calculateProductivityTrend(data);
-  const seasonality = detectSeasonalPatterns(data);
-  const anomalies = detectProductivityAnomalies(data);
+  const recentTrend = data.slice(-7).reduce((acc, day) => {
+    acc.activity += day.activity_count;
+    acc.duration += day.total_seconds;
+    acc.files += day.files_modified;
+    return acc;
+  }, { activity: 0, duration: 0, files: 0 });
 
   return {
-    trend,
-    seasonality,
-    anomalies,
-    forecast: generateNextWeekForecast(data, trend, seasonality)
+    expected_activity: recentTrend.activity / 7,
+    expected_duration: recentTrend.duration / 7,
+    expected_files: recentTrend.files / 7
   };
 }
 
 function assessBurnoutRisk(data) {
-  // Advanced burnout risk assessment
-  const workPatterns = analyzeWorkPatterns(data);
-  const workloadTrend = calculateWorkloadTrend(data);
-  const workLifeBalance = assessWorkLifeBalance(data);
+  const workPatterns = data.reduce((acc, entry) => {
+    if (entry.time_category === 'evening' || entry.time_category === 'early_morning') {
+      acc.offHoursWork += entry.total_seconds;
+    }
+    acc.totalWork += entry.total_seconds;
+    return acc;
+  }, { offHoursWork: 0, totalWork: 0 });
 
+  const offHoursRatio = workPatterns.offHoursWork / workPatterns.totalWork;
   return {
-    risk_level: calculateRiskLevel(workPatterns, workloadTrend, workLifeBalance),
-    contributing_factors: identifyRiskFactors(workPatterns),
-    recommendations: generatePreventiveActions(workPatterns)
+    risk_level: offHoursRatio > 0.4 ? 'high' : offHoursRatio > 0.2 ? 'medium' : 'low',
+    off_hours_ratio: offHoursRatio
   };
 }
 
 function predictSkillGrowth(data) {
-  // ML-based skill growth prediction
+  const skillMetrics = {
+    consistency: calculateConsistency(data),
+    complexity: calculateComplexityTrend(data),
+    diversity: calculateLanguageDiversity(data)
+  };
+
   return {
-    current_expertise: assessCurrentExpertise(data),
-    growth_trajectory: calculateGrowthTrajectory(data),
-    learning_recommendations: generateLearningPath(data),
-    estimated_timeline: predictExpertiseTimeline(data)
+    growth_rate: (skillMetrics.consistency + skillMetrics.complexity + skillMetrics.diversity) / 3,
+    areas_for_improvement: identifyWeakAreas(skillMetrics)
   };
 }
 
 function analyzeCodeComplexity(metrics) {
-  return metrics.map(m => ({
-    file: m.entity,
-    language: m.language,
-    complexity_score: calculateComplexityScore(m),
-    maintainability_index: calculateMaintainabilityIndex(m),
-    change_frequency: m.edit_frequency / m.days_modified
-  }));
+  const complexityFactors = {
+    fileCount: metrics.files_modified,
+    avgFileSize: metrics.avg_lines_per_file,
+    maxFileSize: metrics.max_lines,
+    languageCount: metrics.languages
+  };
+
+  return calculateComplexityScore(complexityFactors);
 }
 
 function identifyRefactoringNeeds(metrics) {
-  return metrics
-    .filter(m => needsRefactoring(m))
-    .map(m => ({
-      file: m.entity,
-      reason: determineRefactoringReason(m),
-      priority: calculateRefactoringPriority(m),
-      estimated_effort: estimateRefactoringEffort(m)
-    }));
+  const thresholds = {
+    files: 100,
+    avgLines: 300,
+    maxLines: 1000
+  };
+
+  return {
+    needs_refactoring: metrics.files_modified > thresholds.files ||
+                      metrics.avg_lines_per_file > thresholds.avgLines ||
+                      metrics.max_lines > thresholds.maxLines,
+    reasons: generateRefactoringReasons(metrics, thresholds)
+  };
 }
 
 function analyzeTeamComposition(data) {
   return {
-    skill_coverage: calculateSkillCoverage(data),
-    expertise_distribution: analyzeExpertiseDistribution(data),
-    team_balance: assessTeamBalance(data),
-    growth_opportunities: identifyGrowthOpportunities(data)
+    team_size: data.contributors,
+    contribution_distribution: calculateContributionDistribution(data),
+    collaboration_score: calculateCollaborationScore(data)
   };
 }
 
 function calculateProjectSuccessProbability(metrics) {
-  return metrics.map(m => ({
-    project_name: m.name,
-    success_probability: calculateSuccessScore(m),
-    risk_factors: identifyRisks(m),
-    recommendations: generateProjectRecommendations(m)
-  }));
+  const factors = {
+    team_size: normalizeTeamSize(metrics.contributors),
+    codebase_health: calculateCodebaseHealth(metrics),
+    development_velocity: calculateVelocity(metrics)
+  };
+
+  return calculateSuccessProbability(factors);
 }
 
-module.exports = router; 
+module.exports = router;

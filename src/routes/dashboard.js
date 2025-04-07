@@ -1,17 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma, redis } = require('../config/db');
 const { authenticateUser } = require('../middleware/auth');
 const { checkHistoryAccess } = require('../middleware/tierLimits');
-const Redis = require('ioredis');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
-const redis = new Redis({
-  host: process.env.REDIS_HOST,
-  port: process.env.REDIS_PORT,
-  password: process.env.REDIS_PASSWORD
-});
 
 const CACHE_TTL = 3600; // 1 hour cache
 

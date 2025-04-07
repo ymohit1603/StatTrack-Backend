@@ -1,12 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
 const { authenticateUser } = require('../middleware/auth');
 const logger = require('../utils/logger');
+const { prisma } = require('../config/db');
 
-const prisma = new PrismaClient();
-
-// Get current user's stats
 router.get('/current/summary', authenticateUser, async (req, res) => {
   try {
     const { range = 'last_7_days' } = req.query;
@@ -37,7 +34,6 @@ router.get('/current/summary', authenticateUser, async (req, res) => {
       projectStats,
       dailyStats
     ] = await Promise.all([
-      // Total coding time
       prisma.heartbeat.aggregate({
         where: {
           userId: req.user.id,
@@ -46,7 +42,6 @@ router.get('/current/summary', authenticateUser, async (req, res) => {
         _sum: { duration: true }
       }),
 
-      // Language statistics
       prisma.$queryRaw`
         SELECT 
           language,
@@ -66,7 +61,6 @@ router.get('/current/summary', authenticateUser, async (req, res) => {
         ORDER BY total_seconds DESC
       `,
 
-      // Editor statistics
       prisma.$queryRaw`
         SELECT 
           editor,
@@ -86,7 +80,6 @@ router.get('/current/summary', authenticateUser, async (req, res) => {
         ORDER BY total_seconds DESC
       `,
 
-      // Project statistics
       prisma.$queryRaw`
         SELECT 
           p.name as project_name,
@@ -107,7 +100,6 @@ router.get('/current/summary', authenticateUser, async (req, res) => {
         ORDER BY total_seconds DESC
       `,
 
-      // Daily statistics
       prisma.$queryRaw`
         SELECT 
           DATE(timestamp) as date,
@@ -145,7 +137,6 @@ router.get('/current/summary', authenticateUser, async (req, res) => {
   }
 });
 
-// Get user's coding activity heatmap
 router.get('/current/heatmap', authenticateUser, async (req, res) => {
   try {
     const { year = new Date().getFullYear() } = req.query;
@@ -170,7 +161,6 @@ router.get('/current/heatmap', authenticateUser, async (req, res) => {
   }
 });
 
-// Get user's best day stats
 router.get('/current/best_day', authenticateUser, async (req, res) => {
   try {
     const bestDay = await prisma.$queryRaw`
@@ -189,7 +179,6 @@ router.get('/current/best_day', authenticateUser, async (req, res) => {
       return res.json({ data: null });
     }
 
-    // Get detailed stats for the best day
     const [languages, editors, projects] = await Promise.all([
       prisma.$queryRaw`
         SELECT 
@@ -242,4 +231,4 @@ router.get('/current/best_day', authenticateUser, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

@@ -1,24 +1,18 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../config/db');
 const { authenticateUser } = require('../middleware/auth');
 const logger = require('../utils/logger');
-const { transformHeartbeat } = require('../workers/heartbeatWorker');
+const { transformHeartbeat, processHeartbeats } = require('../workers/heartbeatWorker');
 const { checkApiLimit, checkStorageLimit } = require('../middleware/tierLimits');
 const os = require('os');
-
-const prisma = new PrismaClient();
 
 // Create heartbeat(s)
 router.post('/', authenticateUser, [checkApiLimit, checkStorageLimit], async (req, res) => {
   try {
     let heartbeats = Array.isArray(req.body) ? req.body : [req.body];
     
-    // Validate wakatime-cli specific fields
-    heartbeats = heartbeats.filter(hb => {
-      const requiredFields = ['time', 'entity', 'type'];
-      return requiredFields.every(field => hb[field] !== undefined);
-    });
+    
 
     if (heartbeats.length === 0) {
       return res.status(400).json({ error: 'Invalid heartbeat data' });
@@ -59,19 +53,16 @@ router.post('/', authenticateUser, [checkApiLimit, checkStorageLimit], async (re
       await redis.hincrby(`user:${req.user.id}:usage:${today}`, 'premium_features', 1);
     }
 
-    // Bulk create heartbeats
-    await prisma.heartbeat.createMany({
-      data: transformedHeartbeats,
-      skipDuplicates: true
-    });
+    // Process heartbeats directly
+    const processedCount = await processHeartbeats(transformedHeartbeats);
 
-    res.status(201).json({ 
-      data: transformedHeartbeats,
-      premium_features_used: hasPremiumFeatures
+    res.json({
+      status: 'success',
+      message: `Processed ${processedCount} heartbeats`
     });
   } catch (error) {
-    logger.error('Error creating heartbeats:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    logger.error('Error processing heartbeats:', error);
+    res.status(500).json({ error: 'Error processing heartbeats' });
   }
 });
 
@@ -236,4 +227,4 @@ router.get('/summaries', authenticateUser, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;
