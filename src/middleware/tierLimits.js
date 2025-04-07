@@ -1,13 +1,5 @@
-const Redis = require('ioredis');
-const { PrismaClient } = require('@prisma/client');
+const { prisma, redis } = require('../config/db');
 const logger = require('../utils/logger');
-
-const prisma = new PrismaClient();
-const redis = new Redis({
-  host: process.env.REDIS_HOST,
-  port: process.env.REDIS_PORT,
-  password: process.env.REDIS_PASSWORD
-});
 
 const TIER_LIMITS = {
   FREE: {
@@ -15,11 +7,11 @@ const TIER_LIMITS = {
     projectsLimit: 3,
     historyDays: 14,
     teamMembers: 1,
-    maxFileSize: 1024 * 1024, // 1MB
+    maxFileSize: 1024 * 1024,
     aiRequestsPerDay: 10,
     concurrentConnections: 2,
     aiMinutesPerMonth: 10,
-    storageLimit: 1024 * 1024 * 1024, // 1GB
+    storageLimit: 1024 * 1024 * 1024,
     customReports: false,
     exportData: false,
     privateProfile: false,
@@ -32,18 +24,18 @@ const TIER_LIMITS = {
     aiCodeReview: false,
     realTimeAlerts: false,
     codeQualityMetrics: false,
-    maxReportingPeriod: 30 // days
+    maxReportingPeriod: 30
   },
   PRO: {
     apiRequestsPerDay: 10000,
     projectsLimit: -1,
     historyDays: 90,
     teamMembers: 1,
-    maxFileSize: 5 * 1024 * 1024, // 5MB
+    maxFileSize: 5 * 1024 * 1024,
     aiRequestsPerDay: 100,
     concurrentConnections: 5,
     aiMinutesPerMonth: 100,
-    storageLimit: 10 * 1024 * 1024 * 1024, // 10GB
+    storageLimit: 10 * 1024 * 1024 * 1024,
     customReports: true,
     exportData: true,
     privateProfile: true,
@@ -56,18 +48,18 @@ const TIER_LIMITS = {
     aiCodeReview: true,
     realTimeAlerts: true,
     codeQualityMetrics: true,
-    maxReportingPeriod: 180 // days
+    maxReportingPeriod: 180
   },
   TEAM: {
     apiRequestsPerDay: 50000,
     projectsLimit: -1,
     historyDays: 365,
     teamMembers: 5,
-    maxFileSize: 10 * 1024 * 1024, // 10MB
+    maxFileSize: 10 * 1024 * 1024,
     aiRequestsPerDay: 500,
     concurrentConnections: 20,
     aiMinutesPerMonth: 500,
-    storageLimit: 100 * 1024 * 1024 * 1024, // 100GB
+    storageLimit: 100 * 1024 * 1024 * 1024,
     customReports: true,
     exportData: true,
     privateProfile: true,
@@ -80,14 +72,14 @@ const TIER_LIMITS = {
     aiCodeReview: true,
     realTimeAlerts: true,
     codeQualityMetrics: true,
-    maxReportingPeriod: 365 // days
+    maxReportingPeriod: 365
   },
   ENTERPRISE: {
     apiRequestsPerDay: -1,
     projectsLimit: -1,
     historyDays: -1,
     teamMembers: -1,
-    maxFileSize: 100 * 1024 * 1024, // 100MB
+    maxFileSize: 100 * 1024 * 1024,
     aiRequestsPerDay: -1,
     concurrentConnections: 100,
     aiMinutesPerMonth: -1,
@@ -104,30 +96,24 @@ const TIER_LIMITS = {
     aiCodeReview: true,
     realTimeAlerts: true,
     codeQualityMetrics: true,
-    maxReportingPeriod: -1 // unlimited
+    maxReportingPeriod: -1
   }
 };
 
-// Cache user tiers for 5 minutes
-const TIER_CACHE_TTL = 300;
-
 async function getUserTier(userId) {
-  const cacheKey = `user:${userId}:tier`;
-  
-  // Try to get from cache first
-  let tier = await redis.get(cacheKey);
-  if (tier) return tier;
+  const cachedTier = await redis.get(`user:${userId}:tier`);
+  if (cachedTier) {
+    return cachedTier;
+  }
 
-  // If not in cache, get from database
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { subscriptionTier: true }
   });
 
-  tier = user?.subscriptionTier || 'FREE';
+  const tier = user?.subscriptionTier || 'FREE';
   
-  // Cache the result
-  await redis.set(cacheKey, tier, 'EX', TIER_CACHE_TTL);
+  await redis.set(`user:${userId}:tier`, tier, 'EX', 300);
   
   return tier;
 }
@@ -143,15 +129,13 @@ async function checkUsageLimit(userId, limitType) {
   
   const currentUsage = await redis.incr(usageKey);
   
-  // Set expiry for usage key if it's new
   if (currentUsage === 1) {
-    await redis.expire(usageKey, 86400); // 24 hours
+    await redis.expire(usageKey, 86400); 
   }
   
   return currentUsage <= limits[limitType];
 }
 
-// Middleware to check project limits
 async function checkProjectLimit(req, res, next) {
   try {
     if (req.method !== 'POST' || !req.path.includes('/projects')) {
@@ -182,7 +166,6 @@ async function checkProjectLimit(req, res, next) {
   }
 }
 
-// Middleware to check API rate limits
 async function checkApiLimit(req, res, next) {
   try {
     const canProceed = await checkUsageLimit(req.user.id, 'apiRequestsPerDay');
@@ -201,7 +184,6 @@ async function checkApiLimit(req, res, next) {
   }
 }
 
-// Middleware to check AI request limits
 async function checkAiLimit(req, res, next) {
   try {
     if (!req.path.includes('/ai')) {
@@ -224,7 +206,6 @@ async function checkAiLimit(req, res, next) {
   }
 }
 
-// Middleware to check file size limits
 async function checkFileSizeLimit(req, res, next) {
   try {
     const tier = await getUserTier(req.user.id);
@@ -248,7 +229,6 @@ async function checkFileSizeLimit(req, res, next) {
   }
 }
 
-// Middleware to check concurrent connections
 async function checkConcurrentConnections(req, res, next) {
   try {
     const tier = await getUserTier(req.user.id);
@@ -257,9 +237,8 @@ async function checkConcurrentConnections(req, res, next) {
     const connectionsKey = `connections:${req.user.id}`;
     const connections = await redis.incr(connectionsKey);
     
-    // Set expiry if it's a new key
     if (connections === 1) {
-      await redis.expire(connectionsKey, 3600); // 1 hour
+      await redis.expire(connectionsKey, 3600); 
     }
 
     if (connections > limits.concurrentConnections) {
@@ -271,7 +250,6 @@ async function checkConcurrentConnections(req, res, next) {
       });
     }
 
-    // Decrease connection count when request ends
     res.on('finish', async () => {
       await redis.decr(connectionsKey);
     });
@@ -283,7 +261,6 @@ async function checkConcurrentConnections(req, res, next) {
   }
 }
 
-// Middleware to check history access
 async function checkHistoryAccess(req, res, next) {
   try {
     if (!req.query.start) return next();
@@ -311,7 +288,6 @@ async function checkHistoryAccess(req, res, next) {
   }
 }
 
-// Add storage usage check
 async function checkStorageLimit(req, res, next) {
   try {
     const tier = await getUserTier(req.user.id);
@@ -341,7 +317,6 @@ async function checkStorageLimit(req, res, next) {
   }
 }
 
-// Add custom report check
 async function checkCustomReportAccess(req, res, next) {
   try {
     const tier = await getUserTier(req.user.id);
@@ -361,7 +336,6 @@ async function checkCustomReportAccess(req, res, next) {
   }
 }
 
-// Add data export check
 async function checkExportAccess(req, res, next) {
   try {
     const tier = await getUserTier(req.user.id);
@@ -381,7 +355,6 @@ async function checkExportAccess(req, res, next) {
   }
 }
 
-// Add AI minutes tracking
 async function trackAiMinutes(userId, minutes) {
   const today = new Date();
   const monthKey = `${today.getFullYear()}-${today.getMonth() + 1}`;
@@ -392,7 +365,6 @@ async function trackAiMinutes(userId, minutes) {
   
   await redis.set(usageKey, newUsage);
   
-  // Set expiry for first day of next month
   const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
   const ttl = Math.floor((nextMonth - today) / 1000);
   await redis.expire(usageKey, ttl);
