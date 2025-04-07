@@ -1,18 +1,7 @@
-const { Kafka } = require('kafkajs');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../config/db');
 const logger = require('../utils/logger');
 
-const prisma = new PrismaClient();
 const BATCH_SIZE = 1000;
-const BATCH_WAIT_MS = 1000;
-
-const kafka = new Kafka({
-  clientId: 'heartbeat-worker',
-  brokers: process.env.KAFKA_BROKERS.split(',')
-});
-
-const consumer = kafka.consumer({ groupId: 'heartbeat-processor' });
-let batch = [];
 
 function groupHeartbeats(heartbeats) {
   return heartbeats.reduce((acc, hb) => {
@@ -194,54 +183,37 @@ async function updateCodingSessions(tx, heartbeats) {
   }
 }
 
-async function run() {
-  await consumer.connect();
-  await consumer.subscribe({ topic: 'heartbeats', fromBeginning: true });
-
-  await consumer.run({
-    eachMessage: async ({ message }) => {
-      const heartbeat = JSON.parse(message.value.toString());
-      batch.push(heartbeat);
-
-      if (batch.length >= BATCH_SIZE) {
-        const currentBatch = [...batch];
-        batch = [];
-        await processBatch(currentBatch);
-      }
-    },
-  });
-
-  // Process partial batches periodically
-  setInterval(async () => {
-    if (batch.length > 0) {
-      const currentBatch = [...batch];
-      batch = [];
-      await processBatch(currentBatch);
-    }
-  }, BATCH_WAIT_MS);
-}
-
-// Handle graceful shutdown
-process.on('SIGTERM', async () => {
+async function processHeartbeats(heartbeats) {
   try {
-    await consumer.disconnect();
-    await prisma.$disconnect();
-    process.exit(0);
-  } catch (error) {
-    logger.error('Error during worker shutdown:', error);
-    process.exit(1);
-  }
-});
+    // Deduplicate heartbeats based on entity and timestamp
+    const uniqueHeartbeats = heartbeats.reduce((acc, curr) => {
+      const key = `${curr.entity}-${curr.timestamp}`;
+      if (!acc[key]) {
+        acc[key] = curr;
+      }
+      return acc;
+    }, {});
 
-if (require.main === module) {
-  run().catch(error => {
-    logger.error('Worker error:', error);
-    process.exit(1);
-  });
+    // Convert back to array
+    const deduplicatedHeartbeats = Object.values(uniqueHeartbeats);
+
+    // Process in batches
+    for (let i = 0; i < deduplicatedHeartbeats.length; i += BATCH_SIZE) {
+      const batch = deduplicatedHeartbeats.slice(i, i + BATCH_SIZE);
+      await processBatch(batch);
+      logger.info(`Processed ${batch.length} heartbeats`);
+    }
+
+    return deduplicatedHeartbeats.length;
+  } catch (error) {
+    logger.error('Error processing heartbeats:', error);
+    throw error;
+  }
 }
 
 module.exports = {
+  processHeartbeats,
+  transformHeartbeat,
   processBatch,
-  groupHeartbeats,
-  transformHeartbeat
-}; 
+  groupHeartbeats
+};
