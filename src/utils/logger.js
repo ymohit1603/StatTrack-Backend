@@ -27,7 +27,6 @@ const logger = winston.createLogger({
   ]
 });
 
-// If we're not in production, log to the console with colors
 if (process.env.NODE_ENV !== 'production') {
   logger.add(new winston.transports.Console({
     format: winston.format.combine(
@@ -37,4 +36,4 @@ if (process.env.NODE_ENV !== 'production') {
   }));
 }
 
-module.exports = logger; 
+module.exports = logger;
