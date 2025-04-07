@@ -1,25 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
 const passport = require('passport');
 const TwitterStrategy = require('passport-twitter').Strategy;
 const LinkedInStrategy = require('passport-linkedin-oauth2').Strategy;
 const jwt = require('jsonwebtoken');
-const Redis = require('ioredis');
 const logger = require('../utils/logger');
+const { prisma, redis } = require('../config/db');
 
-const prisma = new PrismaClient();
-const redis = new Redis({
-  host: process.env.REDIS_HOST,
-  port: process.env.REDIS_PORT,
-  password: process.env.REDIS_PASSWORD
-});
+const USER_CACHE_TTL = 3600;
+const TOKEN_CACHE_TTL = 86400;
 
-// Cache TTL in seconds
-const USER_CACHE_TTL = 3600; // 1 hour
-const TOKEN_CACHE_TTL = 86400; // 24 hours
-
-// Configure Twitter Strategy
 passport.use(new TwitterStrategy({
     consumerKey: process.env.TWITTER_CONSUMER_KEY,
     consumerSecret: process.env.TWITTER_CONSUMER_SECRET,
@@ -27,19 +17,16 @@ passport.use(new TwitterStrategy({
   },
   async (token, tokenSecret, profile, done) => {
     try {
-      // Check cache first
       const cachedUser = await redis.get(`user:twitter:${profile.id}`);
       if (cachedUser) {
         return done(null, JSON.parse(cachedUser));
       }
 
-      // If not in cache, check database
       let user = await prisma.user.findFirst({
         where: { twitterId: profile.id }
       });
 
       if (!user) {
-        // Create new user
         user = await prisma.user.create({
           data: {
             username: profile.username,
@@ -51,7 +38,6 @@ passport.use(new TwitterStrategy({
           }
         });
       } else {
-        // Update app_name if it's different
         if (user.app_name !== 'X') {
           user = await prisma.user.update({
             where: { id: user.id },
@@ -60,7 +46,6 @@ passport.use(new TwitterStrategy({
         }
       }
 
-      // Cache user data
       await redis.set(
         `user:twitter:${profile.id}`,
         JSON.stringify(user),
@@ -76,7 +61,6 @@ passport.use(new TwitterStrategy({
   }
 ));
 
-// Configure LinkedIn Strategy
 passport.use(new LinkedInStrategy({
     clientID: process.env.LINKEDIN_CLIENT_ID,
     clientSecret: process.env.LINKEDIN_CLIENT_SECRET,
@@ -85,19 +69,16 @@ passport.use(new LinkedInStrategy({
   },
   async (accessToken, refreshToken, profile, done) => {
     try {
-      // Check cache first
       const cachedUser = await redis.get(`user:linkedin:${profile.id}`);
       if (cachedUser) {
         return done(null, JSON.parse(cachedUser));
       }
 
-      // If not in cache, check database
       let user = await prisma.user.findFirst({
         where: { linkedinId: profile.id }
       });
 
       if (!user) {
-        // Create new user
         user = await prisma.user.create({
           data: {
             username: profile.displayName.replace(/\s+/g, '').toLowerCase(),
@@ -109,7 +90,6 @@ passport.use(new LinkedInStrategy({
           }
         });
       } else {
-        // Update app_name if it's different
         if (user.app_name !== 'LinkedIn') {
           user = await prisma.user.update({
             where: { id: user.id },
@@ -118,7 +98,6 @@ passport.use(new LinkedInStrategy({
         }
       }
 
-      // Cache user data
       await redis.set(
         `user:linkedin:${profile.id}`,
         JSON.stringify(user),
@@ -134,10 +113,23 @@ passport.use(new LinkedInStrategy({
   }
 ));
 
-// Initialize Twitter auth
+passport.serializeUser((user, done) => {
+  done(null, user.id);
+});
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
+    done(null, user);
+  } catch (error) {
+    done(error, null);
+  }
+});
+
 router.get('/twitter', passport.authenticate('twitter'));
 
-// Twitter callback
 router.get('/twitter/callback',
   passport.authenticate('twitter', { session: false }),
   async (req, res) => {
@@ -148,7 +140,6 @@ router.get('/twitter/callback',
         { expiresIn: '24h' }
       );
 
-      // Cache the token
       await redis.set(
         `token:${token}`,
         req.user.id,
@@ -164,10 +155,8 @@ router.get('/twitter/callback',
   }
 );
 
-// Initialize LinkedIn auth
 router.get('/linkedin', passport.authenticate('linkedin'));
 
-// LinkedIn callback
 router.get('/linkedin/callback',
   passport.authenticate('linkedin', { session: false }),
   async (req, res) => {
@@ -178,7 +167,6 @@ router.get('/linkedin/callback',
         { expiresIn: '24h' }
       );
 
-      // Cache the token
       await redis.set(
         `token:${token}`,
         req.user.id,
@@ -194,7 +182,6 @@ router.get('/linkedin/callback',
   }
 );
 
-// Verify token and get user (with caching)
 router.get('/verify', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -202,19 +189,16 @@ router.get('/verify', async (req, res) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    // Check token cache first
     const cachedUserId = await redis.get(`token:${token}`);
     if (!cachedUserId) {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    // Check user cache
     const cachedUser = await redis.get(`user:${cachedUserId}`);
     if (cachedUser) {
       return res.json({ data: JSON.parse(cachedUser) });
     }
 
-    // If user not in cache, get from database
     const user = await prisma.user.findUnique({
       where: { id: parseInt(cachedUserId) },
       select: {
@@ -230,7 +214,6 @@ router.get('/verify', async (req, res) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
-    // Cache user data
     await redis.set(
       `user:${user.id}`,
       JSON.stringify(user),
@@ -245,7 +228,6 @@ router.get('/verify', async (req, res) => {
   }
 });
 
-// Logout (invalidate token)
 router.post('/logout', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -259,4 +241,4 @@ router.post('/logout', async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;
