@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const session = require('express-session');
+const passport = require('passport');
 const morgan = require('morgan');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
@@ -75,6 +77,23 @@ app.use(helmet({
   xssFilter: true
 }));
 
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'yoursecretkey',
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+      secure: false, // change this to true if using HTTPS in production
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
+    },
+  })
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+
 app.use(cors({
   origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',') : '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -134,35 +153,166 @@ const API_PREFIX = `/api/${process.env.API_VERSION || 'v1'}`;
 
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-app.use(`${API_PREFIX}/auth`, strictLimiter, authRoutes);
+// Authentication and basic user endpoints remain at the top level.
+app.use(`${API_PREFIX}/auth`,  authRoutes);
 app.use(`${API_PREFIX}/users`, [apiLimiter, checkApiLimit], usersRoutes);
-app.use(`${API_PREFIX}/projects`, [apiLimiter, checkApiLimit, checkProjectLimit], projectsRoutes);
-app.use(`${API_PREFIX}/heartbeats`, [apiLimiter, checkApiLimit], heartbeatsRoutes);
-app.use(`${API_PREFIX}/goals`, [apiLimiter, checkApiLimit], goalsRoutes);
-app.use(`${API_PREFIX}/leaderboards`, [apiLimiter, checkApiLimit], leaderboardsRoutes);
-app.use(`${API_PREFIX}/reports`, [apiLimiter, checkApiLimit, checkCustomReportAccess], reportsRouter);
-app.use(`${API_PREFIX}/insights`, [apiLimiter, checkApiLimit], insightsRouter);
-app.use(`${API_PREFIX}/status`, [apiLimiter, checkApiLimit], statusRouter);
-app.use(`${API_PREFIX}/preferences`, [apiLimiter, checkApiLimit], preferencesRouter);
-app.use(`${API_PREFIX}/ai`, [apiLimiter, checkApiLimit, checkAiLimit], aiRouter);
-app.use(`${API_PREFIX}/resources`, [apiLimiter, checkApiLimit], resourcesRouter);
-app.use(`${API_PREFIX}/collaboration`, [apiLimiter, checkApiLimit], collaborationRouter);
-app.use(`${API_PREFIX}/subscriptions`, [apiLimiter, checkApiLimit], subscriptionsRouter);
 
-app.get(`${API_PREFIX}/users/:user/stats`, [apiLimiter, checkApiLimit], statsRoutes);
-app.get(`${API_PREFIX}/users/current/stats`, [apiLimiter, checkApiLimit], statsRoutes);
-app.get(`${API_PREFIX}/users/:user/stats/history`, [apiLimiter, checkApiLimit, checkHistoryAccess], statsRoutes);
-app.get(`${API_PREFIX}/users/current/stats/history`, [apiLimiter, checkApiLimit, checkHistoryAccess], statsRoutes);
-app.get(`${API_PREFIX}/users/:user/stats/export`, [apiLimiter, checkApiLimit, checkExportAccess], statsRoutes);
-app.get(`${API_PREFIX}/users/current/stats/export`, [apiLimiter, checkApiLimit, checkExportAccess], statsRoutes);
-app.get(`${API_PREFIX}/users/:user/durations`, [apiLimiter, checkApiLimit], statsRoutes);
-app.get(`${API_PREFIX}/users/current/durations`, [apiLimiter, checkApiLimit], statsRoutes);
-app.get(`${API_PREFIX}/users/:user/external_durations`, [apiLimiter, checkApiLimit], statsRoutes);
-app.get(`${API_PREFIX}/users/current/external_durations`, [apiLimiter, checkApiLimit], statsRoutes);
-app.post(`${API_PREFIX}/users/:user/external_durations`, [apiLimiter, checkApiLimit], statsRoutes);
-app.post(`${API_PREFIX}/users/current/external_durations`, [apiLimiter, checkApiLimit], statsRoutes);
-app.post(`${API_PREFIX}/users/:user/external_durations.bulk`, [apiLimiter, checkApiLimit], statsRoutes);
-app.post(`${API_PREFIX}/users/current/external_durations.bulk`, [apiLimiter, checkApiLimit], statsRoutes);
+// New endpoint for fetching current user details (mirrors GET /users/current)
+// app.get(`${API_PREFIX}/users/current`, [apiLimiter, checkApiLimit], currentUserRoutes);
+
+// WakaTime-style endpoints for the current user:
+
+// Projects endpoint: /users/current/projects
+app.use(
+  `${API_PREFIX}/users/current/projects`,
+  [apiLimiter, checkApiLimit, checkProjectLimit],
+  projectsRoutes
+);
+
+// Heartbeats endpoint: /users/current/heartbeats
+app.use(
+  `${API_PREFIX}/users/current/heartbeats`,
+  [apiLimiter, checkApiLimit],
+  heartbeatsRoutes
+);
+
+// Summaries endpoint: /users/current/summaries
+// app.use(
+//   `${API_PREFIX}/users/current/summaries`,
+//   [apiLimiter, checkApiLimit],
+//   summariesRoutes
+// );
+
+// Stats endpoint: /users/current/stats
+// app.use(
+//   `${API_PREFIX}/users/current/stats`,
+//   [apiLimiter, checkApiLimit],
+//   statsRoutes
+// );
+
+// Durations endpoints for current user.
+// app.use(
+//   `${API_PREFIX}/users/current/durations`,
+//   [apiLimiter, checkApiLimit],
+//   statsRoutes
+// );
+// app.use(
+//   `${API_PREFIX}/users/current/external_durations`,
+//   [apiLimiter, checkApiLimit],
+//   statsRoutes
+// );
+// app.post(
+//   `${API_PREFIX}/users/current/external_durations`,
+//   [apiLimiter, checkApiLimit],
+//   statsRoutes
+// );
+// app.post(
+//   `${API_PREFIX}/users/current/external_durations.bulk`,
+//   [apiLimiter, checkApiLimit],
+//   statsRoutes
+// );
+
+// Goals endpoint: /users/current/goals
+app.use(
+  `${API_PREFIX}/users/current/goals`,
+  [apiLimiter, checkApiLimit],
+  goalsRoutes
+);
+
+// Leaderboards endpoint: /users/current/leaderboards
+app.use(
+  `${API_PREFIX}/users/current/leaderboards`,
+  [apiLimiter, checkApiLimit],
+  leaderboardsRoutes
+);
+
+// Reports endpoint: /users/current/reports (custom report access check)
+app.use(
+  `${API_PREFIX}/users/current/reports`,
+  [apiLimiter, checkApiLimit, checkCustomReportAccess],
+  reportsRouter
+);
+
+// Insights endpoint: /users/current/insights
+app.use(
+  `${API_PREFIX}/users/current/insights`,
+  [apiLimiter, checkApiLimit],
+  insightsRouter
+);
+
+// Status endpoint: /users/current/status
+app.use(
+  `${API_PREFIX}/users/current/status`,
+  [apiLimiter, checkApiLimit],
+  statusRouter
+);
+
+// Preferences endpoint: /users/current/preferences
+app.use(
+  `${API_PREFIX}/users/current/preferences`,
+  [apiLimiter, checkApiLimit],
+  preferencesRouter
+);
+
+// AI endpoint: /users/current/ai (with an AI limits check)
+app.use(
+  `${API_PREFIX}/users/current/ai`,
+  [apiLimiter, checkApiLimit, checkAiLimit],
+  aiRouter
+);
+
+// Resources endpoint: /users/current/resources
+app.use(
+  `${API_PREFIX}/users/current/resources`,
+  [apiLimiter, checkApiLimit],
+  resourcesRouter
+);
+
+// Collaboration endpoint: /users/current/collaboration
+app.use(
+  `${API_PREFIX}/users/current/collaboration`,
+  [apiLimiter, checkApiLimit],
+  collaborationRouter
+);
+
+// Subscriptions endpoint: /users/current/subscriptions
+app.use(
+  `${API_PREFIX}/users/current/subscriptions`,
+  [apiLimiter, checkApiLimit],
+  subscriptionsRouter
+);
+// app.use(
+//   `${API_PREFIX}/users/current/editors`,
+//   [apiLimiter, checkApiLimit],
+//   editorsRoutes
+// );
+
+// Languages endpoint: Retrieve language statistics or details.
+// app.use(
+//   `${API_PREFIX}/users/current/languages`,
+//   [apiLimiter, checkApiLimit],
+//   languagesRoutes
+// );
+
+// Machines endpoint: List machines (computers) from which the user coded.
+// app.use(
+//   `${API_PREFIX}/users/current/machines`,
+//   [apiLimiter, checkApiLimit],
+//   machinesRoutes
+// );
+
+// Lines of Code endpoint: Return coding metrics such as lines-of-code.
+// app.use(
+//   `${API_PREFIX}/users/current/lines-of-code`,
+//   [apiLimiter, checkApiLimit],
+//   locRoutes
+// );
+
+// app.use(
+//   `${API_PREFIX}/users/current/current/all_time_since_today`,
+//   [apiLimiter, checkApiLimit],
+  
+// );
 
 app.get('/health', (req, res) => res.status(200).json({ status: 'ok' }));
 
@@ -170,10 +320,10 @@ app.use(errorHandler);
 
 const server = http.createServer(app);
 
-if (wsServer) {
-  const wss = wsServer(server);
-  app.set('wss', wss);
-}
+// if (wsServer) {
+//   const wss = wsServer(server);
+//   app.set('wss', wss);
+// }
 
 const shutdown = async () => {
   try {
