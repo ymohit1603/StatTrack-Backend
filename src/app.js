@@ -10,7 +10,7 @@ const rateLimit = require('express-rate-limit');
 const http = require('http');
 const url = require('url');
 const { redis } = require('./config/db');
-const { authenticateUser } = require('./middleware/auth');
+// const { authenticateUser } = require('./middleware/auth');
 const { errorHandler } = require('./middleware/errorHandler');
 const logger = require('./utils/logger');
 const {
@@ -155,7 +155,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Authentication and basic user endpoints remain at the top level.
 app.use(`${API_PREFIX}/auth`,  authRoutes);
-app.use(`${API_PREFIX}/users`, [apiLimiter, checkApiLimit], usersRoutes);
+// app.use(`${API_PREFIX}/users`, [apiLimiter, checkApiLimit], usersRoutes);
 
 // New endpoint for fetching current user details (mirrors GET /users/current)
 // app.get(`${API_PREFIX}/users/current`, [apiLimiter, checkApiLimit], currentUserRoutes);
@@ -172,7 +172,6 @@ app.use(
 // Heartbeats endpoint: /users/current/heartbeats
 app.use(
   `${API_PREFIX}/users/current/heartbeats`,
-  [apiLimiter, checkApiLimit],
   heartbeatsRoutes
 );
 
