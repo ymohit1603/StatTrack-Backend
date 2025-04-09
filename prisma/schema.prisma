@@ -38,7 +38,17 @@ model User {
   linkedinId  String?  @unique
   profile_url String?
   app_name    AppName  @default(X)
+  website      String?
+  github_username String?
+  twitter_username  String?
+  linkedin_username String?
+  address String?
   isPrivate   Boolean  @default(false)
+  editors_used_public Boolean @default(true)
+  categories_used_public  Boolean @default(true)
+  os_used_public Boolean  @default(true)
+  logged_time_public Boolean  @default(true)
+  timezone    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -121,52 +131,42 @@ model Project {
   user           User            @relation(fields: [userId], references: [id])
   userId         Int
   name           String
-  description    String?
-  repositoryUrl  String?
-  branch         String? // Added branch field
+  repository  String?
+  badge         String
+  color         String
+  clients       String[]
+  has_public_url  Boolean
+  human_readable_last_heartbeat_at  String
+  last_heartbeat_at String
+  human_readable_first_heartbeat_at String
+  first_heartbeat_at  String
+  url   String
+  urlencoded_name String
   created_at     DateTime        @default(now())
   updated_at     DateTime        @updatedAt
-  heartbeats     Heartbeat[]
-  codingSessions CodingSession[]
-  dailySummaries DailySummary[]
 
   @@unique([userId, name]) // Project names should be unique per user
 }
 
-model Editor {
-  id           Int         @id @default(autoincrement())
-  name         String      @unique // Editor name should be unique
-  version      String?
-  otherDetails Json?
-  heartbeats   Heartbeat[]
-}
 
-model Language {
-  id           Int         @id @default(autoincrement())
-  name         String      @unique // Language name should be unique
-  version      String?
-  otherDetails Json?
-  heartbeats   Heartbeat[]
-}
+
 
 model Heartbeat {
   id           Int       @id @default(autoincrement())
   user         User      @relation(fields: [userId], references: [id])
   userId       Int
-  project      Project?  @relation(fields: [projectId], references: [id])
-  projectId    Int?
-  editor       Editor?   @relation(fields: [editorId], references: [id])
-  editorId     Int?
-  language     Language? @relation(fields: [languageId], references: [id])
-  languageId   Int?
+  project      String?
+  language     String?
   timestamp    DateTime
-  duration     Decimal   @db.Decimal(10, 2)
+    time            Float            
   entity       String // File path or URL
   type         String    @default("file") // file, domain, app
   category     String    @default("coding") // coding, building, indexing, debugging
   is_write     Boolean   @default(false)
   branch       String? // Git branch
-  lines        Int? // Total lines in file
+  lines        Int // Total lines in file
+  line_additions Int?
+  line_deletions Int?
   lineno       Int? // Current line number
   cursorpos    Int? // Cursor position
   machine_name String? // Machine identifier
@@ -180,7 +180,6 @@ model CodingSession {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id])
   userId    Int
-  project   Project? @relation(fields: [projectId], references: [id])
   projectId Int?
   startTime DateTime
   endTime   DateTime
@@ -193,7 +192,6 @@ model DailySummary {
   id            Int      @id @default(autoincrement())
   user          User     @relation(fields: [userId], references: [id])
   userId        Int
-  project       Project? @relation(fields: [projectId], references: [id])
   projectId     Int?
   summaryDate   DateTime
   totalDuration Decimal  @db.Decimal(10, 2)
