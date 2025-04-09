@@ -8,7 +8,8 @@ const { checkApiLimit, checkStorageLimit } = require('../middleware/tierLimits')
 const os = require('os');
 
 // Create heartbeat(s)
-router.post('/', authenticateUser, [checkApiLimit, checkStorageLimit], async (req, res) => {
+router.post('/', async (req, res) => {
+  console.log("req");
   try {
     let heartbeats = Array.isArray(req.body) ? req.body : [req.body];
     
@@ -18,43 +19,25 @@ router.post('/', authenticateUser, [checkApiLimit, checkStorageLimit], async (re
       return res.status(400).json({ error: 'Invalid heartbeat data' });
     }
 
-    // Transform and validate heartbeats
-    const transformedHeartbeats = heartbeats.map(heartbeat => ({
-      ...transformHeartbeat(heartbeat),
-      userId: req.user.id,
-      // Handle wakatime-cli specific fields
-      entity: heartbeat.entity,
-      type: heartbeat.type || 'file',
-      category: heartbeat.category || 'coding',
-      time: heartbeat.time,
-      project_name: heartbeat.project || 'Unknown',
-      language: heartbeat.language,
-      lines: heartbeat.lines,
-      lineno: heartbeat.lineno,
-      cursorpos: heartbeat.cursorpos,
-      is_write: heartbeat.is_write || false,
-      dependencies: heartbeat.dependencies || [],
-      machine_name: heartbeat.machine_name || os.hostname()
-    }));
 
     // Track premium features usage
-    const redis = req.app.get('redis');
-    const today = new Date().toISOString().split('T')[0];
-    await redis.hincrby(`user:${req.user.id}:usage:${today}`, 'api_requests', 1);
+    // const redis = req.app.get('redis');
+    // const today = new Date().toISOString().split('T')[0];
+    // await redis.hincrby(`user:${req.user.id}:usage:${today}`, 'api_requests', 1);
     
     // Check for premium features in heartbeats
-    const hasPremiumFeatures = transformedHeartbeats.some(hb => 
-      hb.dependencies?.length > 0 || 
-      hb.lines > 1000 ||
-      hb.category === 'debugging'
-    );
+    // const hasPremiumFeatures = transformedHeartbeats.some(hb => 
+    //   hb.dependencies?.length > 0 || 
+    //   hb.lines > 1000 ||
+    //   hb.category === 'debugging'
+    // );
 
-    if (hasPremiumFeatures) {
-      await redis.hincrby(`user:${req.user.id}:usage:${today}`, 'premium_features', 1);
-    }
+    // if (hasPremiumFeatures) {
+    //   await redis.hincrby(`user:${req.user.id}:usage:${today}`, 'premium_features', 1);
+    // }
 
     // Process heartbeats directly
-    const processedCount = await processHeartbeats(transformedHeartbeats);
+    const processedCount = await processHeartbeats(req.body);
 
     res.json({
       status: 'success',
