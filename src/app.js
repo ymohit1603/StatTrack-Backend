@@ -190,11 +190,11 @@ app.use(
 // );
 
 // Durations endpoints for current user.
-// app.use(
-//   `${API_PREFIX}/users/current/durations`,
-//   [apiLimiter, checkApiLimit],
-//   statsRoutes
-// );
+app.use(
+  `${API_PREFIX}/users/current/durations`,
+  [apiLimiter, checkApiLimit],
+  statsRoutes
+);
 // app.use(
 //   `${API_PREFIX}/users/current/external_durations`,
 //   [apiLimiter, checkApiLimit],

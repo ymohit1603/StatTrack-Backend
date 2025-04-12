@@ -157,13 +157,14 @@ model Heartbeat {
   userId       Int
   project      String?
   language     String?
-  timestamp    DateTime
-    time            Float            
+  time            Float     
+  project_root_count       Int
   entity       String // File path or URL
   type         String    @default("file") // file, domain, app
   category     String    @default("coding") // coding, building, indexing, debugging
   is_write     Boolean   @default(false)
   branch       String? // Git branch
+  dependencies String?
   lines        Int // Total lines in file
   line_additions Int?
   line_deletions Int?
@@ -173,9 +174,11 @@ model Heartbeat {
   created_at   DateTime  @default(now())
   updated_at   DateTime  @updatedAt
 
-  @@index([userId, timestamp])
+  @@index([userId, created_at])
 }
 
+
+//durations
 model CodingSession {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id])

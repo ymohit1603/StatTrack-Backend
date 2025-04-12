@@ -17,39 +17,11 @@ function groupHeartbeats(heartbeats) {
   });
 }
 
-function transformHeartbeat(heartbeat) {
-  const safeInt = (value) => {
-    const parsed = parseInt(value, 10);
-    return isNaN(parsed) ? null : parsed;
-  };
-
-  return {
-    userId: heartbeat.userId,
-    project: heartbeat.project_name ?? null,
-    language: heartbeat.language ?? null,
-    timestamp: new Date(heartbeat.time * 1000),
-    time: parseFloat(heartbeat.time.toFixed(6)),
-    entity: heartbeat.entity,
-    type: heartbeat.type ?? "file",
-    category: heartbeat.category ?? "coding",
-    is_write: heartbeat.is_write ?? false,
-    branch: heartbeat.branch ?? null,
-    lines: heartbeat.lines,
-    line_additions: safeInt(heartbeat.line_additions),
-    line_deletions: safeInt(heartbeat.line_deletions),
-    lineno: safeInt(heartbeat.lineno),
-    cursorpos: safeInt(heartbeat.cursorpos),
-    machine_name: heartbeat.machine_name ?? null,
-    created_at: new Date(),
-    updated_at: new Date(),
-  };
-}
-
 async function storeSession(userId, projectId, session) {
   const timestamps = session.map(hb => new Date(hb.time * 1000));
   const startTime = new Date(Math.min(...timestamps));
   const endTime = new Date(Math.max(...timestamps));
-  const duration = Math.ceil((endTime - startTime) / (1000 * 60)); // in minutes
+  const duration = Math.ceil((endTime - startTime) / (1000 * 60)); 
 
   await prisma.codingSession.create({
     data: {
@@ -101,13 +73,15 @@ async function updateCodingSessions(heartbeats) {
 
 async function processBatch(heartbeats) {
   try {
-    const transformedHeartbeats = heartbeats.map(transformHeartbeat);
+    
     await prisma.heartbeat.createMany({
-      data: transformedHeartbeats,
+      data: heartbeats,
       skipDuplicates: true
     });
 
-    await updateCodingSessions(transformedHeartbeats);
+
+
+    await updateCodingSessions(heartbeats);
 
     logger.info(`Processed ${heartbeats.length} heartbeats`);
   } catch (error) {
@@ -131,7 +105,6 @@ async function processHeartbeats(heartbeats) {
 
 module.exports = {
   processHeartbeats,
-  transformHeartbeat,
   processBatch,
   groupHeartbeats
 };
