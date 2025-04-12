@@ -31,26 +31,26 @@ enum BillingInterval {
 }
 
 model User {
-  id          Int      @id @default(autoincrement())
-  username    String   @unique
-  email       String   @unique
-  twitterId   String?  @unique
-  linkedinId  String?  @unique
-  profile_url String?
-  app_name    AppName  @default(X)
-  website      String?
-  github_username String?
-  twitter_username  String?
-  linkedin_username String?
-  address String?
-  isPrivate   Boolean  @default(false)
-  editors_used_public Boolean @default(true)
-  categories_used_public  Boolean @default(true)
-  os_used_public Boolean  @default(true)
-  logged_time_public Boolean  @default(true)
-  timezone    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                     Int      @id @default(autoincrement())
+  username               String   @unique
+  email                  String   @unique
+  twitterId              String?  @unique
+  linkedinId             String?  @unique
+  profile_url            String?
+  app_name               AppName  @default(X)
+  website                String?
+  github_username        String?
+  twitter_username       String?
+  linkedin_username      String?
+  address                String?
+  isPrivate              Boolean  @default(false)
+  editors_used_public    Boolean  @default(true)
+  categories_used_public Boolean  @default(true)
+  os_used_public         Boolean  @default(true)
+  logged_time_public     Boolean  @default(true)
+  timezone               String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   // New fields for monetization
   subscriptionTier  SubscriptionTier @default(FREE)
@@ -127,68 +127,69 @@ model ApiKey {
 }
 
 model Project {
-  id             Int             @id @default(autoincrement())
-  user           User            @relation(fields: [userId], references: [id])
-  userId         Int
-  name           String
-  repository  String?
-  badge         String
-  color         String
-  clients       String[]
-  has_public_url  Boolean
+  id                                Int      @id @default(autoincrement())
+  user                              User     @relation(fields: [userId], references: [id])
+  userId                            Int
+  name                              String
+  repository                        String?
+  badge                             String
+  color                             String
+  clients                           String[]
+  has_public_url                    Boolean
   human_readable_last_heartbeat_at  String
-  last_heartbeat_at String
+  last_heartbeat_at                 String
   human_readable_first_heartbeat_at String
-  first_heartbeat_at  String
-  url   String
-  urlencoded_name String
-  created_at     DateTime        @default(now())
-  updated_at     DateTime        @updatedAt
+  first_heartbeat_at                String
+  url                               String
+  urlencoded_name                   String
+  created_at                        DateTime @default(now())
+  updated_at                        DateTime @updatedAt
 
   @@unique([userId, name]) // Project names should be unique per user
 }
 
-
-
-
 model Heartbeat {
-  id           Int       @id @default(autoincrement())
-  user         User      @relation(fields: [userId], references: [id])
-  userId       Int
-  project      String?
-  language     String?
-  time            Float     
-  project_root_count       Int
-  entity       String // File path or URL
-  type         String    @default("file") // file, domain, app
-  category     String    @default("coding") // coding, building, indexing, debugging
-  is_write     Boolean   @default(false)
-  branch       String? // Git branch
-  dependencies String?
-  lines        Int // Total lines in file
-  line_additions Int?
-  line_deletions Int?
-  lineno       Int? // Current line number
-  cursorpos    Int? // Cursor position
-  machine_name String? // Machine identifier
-  created_at   DateTime  @default(now())
-  updated_at   DateTime  @updatedAt
+  id                 Int      @id @default(autoincrement())
+  user               User     @relation(fields: [userId], references: [id])
+  userId             Int
+  project            String?
+  language           String?
+  time               Float
+  project_root_count Int
+  entity             String // File path or URL
+  type               String   @default("file") // file, domain, app
+  category           String   @default("coding") // coding, building, indexing, debugging
+  is_write           Boolean  @default(false)
+  branch             String? // Git branch
+  dependencies       String?
+  lines              Int // Total lines in file
+  line_additions     Int?
+  line_deletions     Int?
+  lineno             Int? // Current line number
+  cursorpos          Int? // Cursor position
+  machine_name       String? // Machine identifier
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
 
   @@index([userId, created_at])
 }
 
-
-//durations
 model CodingSession {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id])
   userId    Int
-  projectId Int?
-  startTime DateTime
-  endTime   DateTime
-  duration  Int // In minutes
+  projectId Int? // Optional project reference
+  startTime DateTime // ISO start time of session
+  endTime   DateTime // ISO end time of session
+  duration  Int // Duration in seconds (WakaTime uses float but we round here)
 
-  @@index([userId, startTime]) // Optimize queries for user sessions
+  branch   String? // Optional: e.g., "main", "dev"
+  language String? // Optional: e.g., "JavaScript"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, startTime]) // For efficient querying per user/date
 }
 
 model DailySummary {

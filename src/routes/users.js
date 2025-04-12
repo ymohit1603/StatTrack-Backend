@@ -63,13 +63,14 @@ router.put('/current/settings', authenticateUser, async (req, res) => {
   }
 });
 
-// Get user summaries
 router.get('/:userId/summaries', async (req, res) => {
   try {
-    const { start, end, project } = req.query;
+    const { start, end, project, branches, timeout, writes_only, timezone } = req.query;
+    const userId = parseInt(req.params.userId);
+
     const summaries = await prisma.dailySummary.findMany({
       where: {
-        userId: parseInt(req.params.userId),
+        userId,
         projectId: project ? parseInt(project) : undefined,
         summaryDate: {
           gte: start ? new Date(start) : undefined,
@@ -85,7 +86,66 @@ router.get('/:userId/summaries', async (req, res) => {
         }
       }
     });
-    res.json({ data: summaries });
+
+    // Initialize aggregation structures
+    let cumulativeSeconds = 0;
+    const dailyData = [];
+
+    for (const summary of summaries) {
+      const dayTotalSeconds = summary.totalSeconds || 0;
+      cumulativeSeconds += dayTotalSeconds;
+
+      dailyData.push({
+        grand_total: {
+          total_seconds: dayTotalSeconds,
+          hours: Math.floor(dayTotalSeconds / 3600),
+          minutes: Math.floor((dayTotalSeconds % 3600) / 60),
+          digital: `${String(Math.floor(dayTotalSeconds / 3600)).padStart(2, '0')}:${String(Math.floor((dayTotalSeconds % 3600) / 60)).padStart(2, '0')}`,
+          text: `${Math.floor(dayTotalSeconds / 3600)} hrs ${Math.floor((dayTotalSeconds % 3600) / 60)} mins`
+        },
+        projects: summary.project ? [{
+          name: summary.project.name,
+          total_seconds: dayTotalSeconds,
+          percent: 100,
+          digital: `${String(Math.floor(dayTotalSeconds / 3600)).padStart(2, '0')}:${String(Math.floor((dayTotalSeconds % 3600) / 60)).padStart(2, '0')}`,
+          text: `${Math.floor(dayTotalSeconds / 3600)} hrs ${Math.floor((dayTotalSeconds % 3600) / 60)} mins`,
+          hours: Math.floor(dayTotalSeconds / 3600),
+          minutes: Math.floor((dayTotalSeconds % 3600) / 60)
+        }] : [],
+        range: {
+          date: summary.summaryDate.toISOString().split('T')[0],
+          start: new Date(summary.summaryDate.setHours(0, 0, 0)).toISOString(),
+          end: new Date(summary.summaryDate.setHours(23, 59, 59)).toISOString(),
+          text: 'Some day', // Optionally add humanized day text like "Yesterday", "Today"
+          timezone: timezone || 'UTC'
+        }
+      });
+    }
+
+    const totalDays = new Set(summaries.map(s => s.summaryDate.toISOString().split('T')[0])).size;
+
+    const response = {
+      data: dailyData,
+      cumulative_total: {
+        seconds: cumulativeSeconds,
+        text: `${Math.floor(cumulativeSeconds / 3600)} hrs ${Math.floor((cumulativeSeconds % 3600) / 60)} mins`,
+        decimal: (cumulativeSeconds / 3600).toFixed(2),
+        digital: `${String(Math.floor(cumulativeSeconds / 3600)).padStart(2, '0')}:${String(Math.floor((cumulativeSeconds % 3600) / 60)).padStart(2, '0')}`
+      },
+      daily_average: {
+        holidays: 0, // You can implement holiday detection if needed
+        days_including_holidays: totalDays,
+        days_minus_holidays: totalDays,
+        seconds: cumulativeSeconds / totalDays,
+        text: `${Math.floor((cumulativeSeconds / totalDays) / 3600)} hrs ${Math.floor(((cumulativeSeconds / totalDays) % 3600) / 60)} mins`,
+        seconds_including_other_language: cumulativeSeconds / totalDays,
+        text_including_other_language: `${Math.floor((cumulativeSeconds / totalDays) / 3600)} hrs ${Math.floor(((cumulativeSeconds / totalDays) % 3600) / 60)} mins`
+      },
+      start: start ? new Date(start).toISOString() : null,
+      end: end ? new Date(end).toISOString() : null
+    };
+
+    res.json(response);
   } catch (error) {
     logger.error('Error fetching user summaries:', error);
     res.status(500).json({ error: 'Internal server error' });

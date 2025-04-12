@@ -16,36 +16,44 @@ function groupHeartbeats(heartbeats) {
     projects: new Set()
   });
 }
-
 async function storeSession(userId, projectId, session) {
-  const timestamps = session.map(hb => new Date(hb.time * 1000));
+  const timestamps = session.map(hb => new Date(Number(hb.time) * 1000));
   const startTime = new Date(Math.min(...timestamps));
   const endTime = new Date(Math.max(...timestamps));
-  const duration = Math.ceil((endTime - startTime) / (1000 * 60)); 
+  const duration = Math.ceil((endTime - startTime) / 1000); // duration in seconds
 
-  await prisma.codingSession.create({
-    data: {
-      userId: parseInt(userId),
-      projectId: projectId === 'unknown' ? null : parseInt(projectId),
-      startTime,
-      endTime,
-      duration
-    }
-  });
+  // Optional: get most recent branch/language
+  const latest = session[session.length - 1];
+  const branch = latest.branch || null;
+  const language = latest.language || null;
+
+  if (duration >= 60) { // Skip sessions shorter than 1 minute
+    await prisma.codingSession.create({
+      data: {
+        userId: parseInt(userId),
+        projectId: projectId === 'unknown' ? null : parseInt(projectId),
+        startTime,
+        endTime,
+        duration,
+        branch,
+        language
+      }
+    });
+  }
 }
 
 async function updateCodingSessions(heartbeats) {
   const sessionGroups = {};
+  const TIMEOUT = 15 * 60; // 15 minutes in seconds
+
+  // Group heartbeats by userId + projectId
   for (const hb of heartbeats) {
     const key = `${hb.userId}-${hb.projectId || 'unknown'}`;
-    if (!sessionGroups[key]) {
-      sessionGroups[key] = [];
-    }
+    if (!sessionGroups[key]) sessionGroups[key] = [];
     sessionGroups[key].push(hb);
   }
 
-  const TIMEOUT = 15 * 60;
-
+  // Process each group
   for (const [key, groupHeartbeats] of Object.entries(sessionGroups)) {
     const [userId, projectId] = key.split('-');
     const sortedHeartbeats = groupHeartbeats.sort((a, b) => a.time - b.time);
@@ -65,6 +73,7 @@ async function updateCodingSessions(heartbeats) {
       }
     }
 
+    // Store last session
     if (session.length > 0) {
       await storeSession(userId, projectId, session);
     }
