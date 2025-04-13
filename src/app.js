@@ -155,8 +155,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Authentication and basic user endpoints remain at the top level.
 app.use(`${API_PREFIX}/auth`,  authRoutes);
-// app.use(`${API_PREFIX}/users`, [apiLimiter, checkApiLimit], usersRoutes);
-
+app.use(`${API_PREFIX}/users`, /*[apiLimiter, checkApiLimit]*/ usersRoutes);
 // New endpoint for fetching current user details (mirrors GET /users/current)
 // app.get(`${API_PREFIX}/users/current`, [apiLimiter, checkApiLimit], currentUserRoutes);
 
