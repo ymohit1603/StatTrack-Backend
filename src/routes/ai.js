@@ -7,6 +7,8 @@ const logger = require('../utils/logger');
 const prisma = new PrismaClient();
 
 router.get('/predictions/productivity', authenticateUser, async (req, res) => {
+  
+  
   try {
     const historicalData = await prisma.$queryRaw`
       WITH daily_stats AS (

@@ -40,7 +40,7 @@ const aiRouter = require('./routes/ai');
 const resourcesRouter = require('./routes/resources');
 const { router: collaborationRouter, wsServer } = require('./routes/collaboration');
 const subscriptionsRouter = require('./routes/subscriptions');
-
+const handleRoute=require('./routes/handleRoute');
 const app = express();
 
 app.set('redis', redis);
@@ -153,6 +153,8 @@ const API_PREFIX = `/api/${process.env.API_VERSION || 'v1'}`;
 
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+app.use('{API_PREFIX}',handleRoute);
+
 // Authentication and basic user endpoints remain at the top level.
 app.use(`${API_PREFIX}/auth`,  authRoutes);
 app.use(`${API_PREFIX}/users`, /*[apiLimiter, checkApiLimit]*/ usersRoutes);
@@ -170,7 +172,7 @@ app.use(
 
 // Heartbeats endpoint: /users/current/heartbeats
 app.use(
-  `${API_PREFIX}/users/current/heartbeats`,
+  `${API_PREFIX}/users/current/heartbeats.bulk`,
   heartbeatsRoutes
 );
 
@@ -178,7 +180,7 @@ app.use(
 // app.use(
 //   `${API_PREFIX}/users/current/summaries`,
 //   [apiLimiter, checkApiLimit],
-//   summariesRoutes
+//   summariesRoutes  
 // );
 
 // Stats endpoint: /users/current/stats
@@ -350,3 +352,4 @@ server.listen(port, () => {
 });
 
 module.exports = { app, server };
+

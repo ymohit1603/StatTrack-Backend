@@ -9,7 +9,8 @@ const os = require('os');
 
 // Create heartbeat(s)
 router.post('/', async (req, res) => {
-  console.log("req");
+  console.log("req",req.body);
+  console.log(req.user);
   try {
     let heartbeats = Array.isArray(req.body) ? req.body : [req.body];
     
