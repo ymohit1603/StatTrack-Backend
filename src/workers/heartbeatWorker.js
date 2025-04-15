@@ -105,7 +105,7 @@ async function processHeartbeats(heartbeats) {
       await processBatch(batch);
       logger.info(`Processed batch of ${batch.length}`);
     }
-    return heartbeats.length;
+    return heartbeats.body.length;
   } catch (error) {
     logger.error('Error processing heartbeats:', error);
     throw error;

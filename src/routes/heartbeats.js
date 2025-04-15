@@ -10,9 +10,11 @@ const os = require('os');
 // Create heartbeat(s)
 router.post('/', async (req, res) => {
   console.log("req",req.body);
-  console.log(req.user);
+  console.log("req.user",req.user);
   try {
     let heartbeats = Array.isArray(req.body) ? req.body : [req.body];
+    
+
     
     
 
@@ -38,7 +40,7 @@ router.post('/', async (req, res) => {
     // }
 
     // Process heartbeats directly
-    const processedCount = await processHeartbeats(req.body);
+    const processedCount = await processHeartbeats(req);
 
     res.json({
       status: 'success',
