@@ -135,7 +135,7 @@ router.get('/twitter/callback',
         TOKEN_CACHE_TTL
       );
 
-      res.redirect(`${process.env.FRONTEND_URL}/auth-callback?token=${token}`);
+      res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
     } catch (error) {
       logger.error('Twitter callback error:', error);
       res.redirect(`${process.env.FRONTEND_URL}/auth-error`);
@@ -162,7 +162,7 @@ router.get('/linkedin/callback',
         TOKEN_CACHE_TTL
       );
 
-      res.redirect(`${process.env.FRONTEND_URL}/auth-callback?token=${token}`);
+      res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
     } catch (error) {
       logger.error('LinkedIn callback error:', error);
       res.redirect(`${process.env.FRONTEND_URL}/auth-error`);
@@ -175,31 +175,53 @@ router.get('/verify', async (req, res) => {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'No token provided' });
 
-    const cachedUserId = await redis.get(`token:${token}`);
-    if (!cachedUserId) return res.status(401).json({ error: 'Invalid token' });
+    // const cachedUserId = await redis.get(`token:${token}`);
+    // if (!cachedUserId) return res.status(401).json({ error: 'Invalid token' });
 
-    const cachedUser = await redis.get(`user:${cachedUserId}`);
-    if (cachedUser) return res.json({ data: JSON.parse(cachedUser) });
+    // const cachedUser = await redis.get(`user:${cachedUserId}`);
+    // if (cachedUser) return res.json({ data: JSON.parse(cachedUser) });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const userId = decoded.userId;
 
     const user = await prisma.user.findUnique({
-      where: { id: parseInt(cachedUserId) },
+      where: { id: userId },
       select: {
         id: true,
         username: true,
         email: true,
+        twitterId: true,
+        linkedinId: true,
         profile_url: true,
-        isPrivate: true
+        app_name: true,
+        website: true,
+        github_username: true,
+        twitter_username: true,
+        linkedin_username: true,
+        address: true,
+        isPrivate: true,
+        editors_used_public: true,
+        categories_used_public: true,
+        os_used_public: true,
+        logged_time_public: true,
+        timezone: true,
+        createdAt: true,
+        updatedAt: true,
+        subscriptionTier: true,
+        subscriptionStart: true,
+        subscriptionEnd: true,
+        billingInterval: true
       }
     });
 
     if (!user) return res.status(401).json({ error: 'User not found' });
 
-    await redis.set(
-      `user:${user.id}`,
-      JSON.stringify(user),
-      'EX',
-      USER_CACHE_TTL
-    );
+    // await redis.set(
+    //   `user:${user.id}`,
+    //   JSON.stringify(user),
+    //   'EX',
+    //   USER_CACHE_TTL
+    // );
 
     res.json({ data: user });
   } catch (error) {
