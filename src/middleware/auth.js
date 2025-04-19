@@ -21,7 +21,11 @@ async function authenticateUser(req, res, next) {
     }
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'test-secret');
+      console.log(token);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log("decoded id", decoded.userId);
+      console.log('Decoded JWT Payload:', decoded);
+      console.log(process.env.JWT_SECRET);
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId }
       });

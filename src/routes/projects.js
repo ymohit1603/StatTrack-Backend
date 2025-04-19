@@ -9,10 +9,12 @@ const prisma = new PrismaClient();
 // Get all projects for current user
 router.get('/', authenticateUser, async (req, res) => {
   try {
+    console.log("req.user",req.user);
     const projects = await prisma.project.findMany({
       where: { userId: req.user.id },
-      orderBy: { name: 'asc' }
+     
     });
+    console.log("projects",projects);
     res.json({ data: projects });
   } catch (error) {
     logger.error('Error fetching projects:', error);

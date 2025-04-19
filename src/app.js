@@ -168,7 +168,7 @@ app.use(`${API_PREFIX}/users`, /*[apiLimiter, checkApiLimit]*/ usersRoutes);
 // Projects endpoint: /users/current/projects
 app.use(
   `${API_PREFIX}/users/current/projects`,
-  [apiLimiter, checkApiLimit, checkProjectLimit],
+  /*[apiLimiter, checkApiLimit, checkProjectLimit]*/
   projectsRoutes
 );
 
