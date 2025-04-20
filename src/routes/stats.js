@@ -30,6 +30,11 @@ router.get('/summary', authenticateUser, async (req, res) => {
         end = new Date(start);
         end.setHours(23, 59, 59, 999);
         break;
+      case 'last_24_hours':
+        end = now;
+        start = new Date(now);
+        start.setHours(start.getHours() - 24);
+        break;
       case 'last_7_days':
         end = now;
         start = new Date(now);
@@ -58,116 +63,116 @@ router.get('/summary', authenticateUser, async (req, res) => {
         return res.status(400).json({ error: 'Invalid range parameter' });
     }
 
-    const summaryAgg = await prisma.dailySummary.aggregate({
-      where: { userId, summaryDate: { gte: start, lte: end } },
-      _sum: { totalDuration: true },
-    });
-    const totalSeconds = summaryAgg._sum.totalDuration
-      ? parseFloat(summaryAgg._sum.totalDuration.toString())
-      : 0;
+    // Get previous period for comparison
+    const prevStart = new Date(start);
+    const prevEnd = new Date(end);
+    const diff = end.getTime() - start.getTime();
+    prevStart.setTime(prevStart.getTime() - diff);
+    prevEnd.setTime(prevEnd.getTime() - diff);
 
-    const dayCount = range === 'today'
-      ? 1
-      : Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const dailyAverage = dayCount > 0
-      ? Math.round(totalSeconds / dayCount)
-      : 0;
-
-    const [languageStats, editorStats, projectStats] = await Promise.all([
+    // Fetch current period data
+    const [currentSummary, currentDaily, currentLanguages, currentSessions] = await Promise.all([
+      prisma.dailySummary.aggregate({
+        where: { userId, summaryDate: { gte: start, lte: end } },
+        _sum: { totalDuration: true },
+      }),
       prisma.$queryRaw`
-        SELECT language, COUNT(*) AS heartbeat_count, SUM(duration) AS total_seconds,
-          ROUND(SUM(duration)*100.0/(
-            SELECT SUM(duration) FROM Heartbeat
-            WHERE userId=${userId} AND timestamp BETWEEN ${start} AND ${end}
-          ),2) AS percentage
+        SELECT DATE(summaryDate) as date, 
+               SUM(totalDuration) as total_seconds,
+               COUNT(*) as session_count
+        FROM DailySummary
+        WHERE userId = ${userId} 
+        AND summaryDate BETWEEN ${start} AND ${end}
+        GROUP BY DATE(summaryDate)
+        ORDER BY date ASC
+      `,
+      prisma.$queryRaw`
+        SELECT language, 
+               COUNT(*) as heartbeat_count,
+               SUM(duration) as total_seconds,
+               ROUND(SUM(duration)*100.0/(
+                 SELECT SUM(duration) FROM Heartbeat
+                 WHERE userId=${userId} AND timestamp BETWEEN ${start} AND ${end}
+               ),2) as percentage
         FROM Heartbeat
-        WHERE userId=${userId} AND timestamp BETWEEN ${start} AND ${end}
-          AND language IS NOT NULL
+        WHERE userId=${userId} 
+        AND timestamp BETWEEN ${start} AND ${end}
+        AND language IS NOT NULL
         GROUP BY language
         ORDER BY total_seconds DESC
       `,
-      prisma.$queryRaw`
-        SELECT editor, COUNT(*) AS heartbeat_count, SUM(duration) AS total_seconds,
-          ROUND(SUM(duration)*100.0/(
-            SELECT SUM(duration) FROM Heartbeat
-            WHERE userId=${userId} AND timestamp BETWEEN ${start} AND ${end}
-          ),2) AS percentage
-        FROM Heartbeat
-        WHERE userId=${userId} AND timestamp BETWEEN ${start} AND ${end}
-          AND editor IS NOT NULL
-        GROUP BY editor
-        ORDER BY total_seconds DESC
-      `,
-      prisma.$queryRaw`
-        SELECT p.name AS project_name, p.repositoryUrl,
-          COUNT(*) AS heartbeat_count, SUM(h.duration) AS total_seconds,
-          ROUND(SUM(h.duration)*100.0/(
-            SELECT SUM(duration) FROM Heartbeat
-            WHERE userId=${userId} AND timestamp BETWEEN ${start} AND ${end}
-          ),2) AS percentage
-        FROM Heartbeat h
-        LEFT JOIN Project p ON h.projectId=p.id
-        WHERE h.userId=${userId} AND h.timestamp BETWEEN ${start} AND ${end}
-        GROUP BY p.id,p.name,p.repositoryUrl
-        ORDER BY total_seconds DESC
-      `
+      prisma.codingSession.findMany({
+        where: {
+          userId,
+          startTime: { gte: start, lte: end }
+        },
+        orderBy: { startTime: 'desc' },
+        take: 10,
+        select: {
+          startTime: true,
+          endTime: true,
+          duration: true,
+          totalLines: true,
+          languages: true,
+        }
+      })
     ]);
 
-    const dailyRows = await prisma.dailySummary.findMany({
-      where: { userId, summaryDate: { gte: start, lte: end } },
-      select: { summaryDate: true, totalDuration: true },
-      orderBy: { summaryDate: 'desc' }
+    // Fetch previous period data for comparison
+    const prevSummary = await prisma.dailySummary.aggregate({
+      where: { userId, summaryDate: { gte: prevStart, lte: prevEnd } },
+      _sum: { totalDuration: true },
     });
-    const dailyStats = dailyRows.map(r => ({
-      date: r.summaryDate.toISOString().split('T')[0],
-      total_seconds: parseFloat(r.totalDuration.toString())
-    }));
 
-    let bestDays = [];
-    if (range !== 'today') {
-      bestDays = [...dailyStats]
-        .sort((a, b) => b.total_seconds - a.total_seconds)
-        .slice(0, 3);
-
-      for (let day of bestDays) {
-        const coding = await prisma.codingSession.aggregate({
-          where: {
-            userId,
-            startTime: {
-              gte: new Date(`${day.date}T00:00:00.000Z`),
-              lte: new Date(`${day.date}T23:59:59.999Z`)
-            }
-          },
-          _sum: { totalLines: true }
-        });
-        day.total_lines = coding._sum.totalLines || 0;
+    // Get lines added data
+    const linesData = await prisma.codingSession.groupBy({
+      by: ['startTime'],
+      where: {
+        userId,
+        startTime: { gte: start, lte: end }
+      },
+      _sum: {
+        totalLines: true
+      },
+      orderBy: {
+        startTime: 'asc'
       }
-    }
-
-    const codingAgg = await prisma.codingSession.aggregate({
-      where: { userId, startTime: { gte: start, lte: end } },
-      _sum: { duration: true, totalLines: true }
     });
-    const totalCodingTime = codingAgg._sum.duration || 0;
-    const totalLinesWritten = codingAgg._sum.totalLines || 0;
 
-    const sessionDaysResult = await prisma.$queryRaw`
-      SELECT COUNT(DISTINCT DATE("startTime")) AS day_count
-      FROM "CodingSession"
-      WHERE "userId" = ${userId} AND "startTime" BETWEEN ${start} AND ${end}
+    // Get leaderboard history
+    const leaderboard = await prisma.$queryRaw`
+      WITH RankedUsers AS (
+        SELECT 
+          u.id,
+          u.username,
+          u.profile_url,
+          SUM(ds.totalDuration) as total_seconds,
+          COUNT(DISTINCT DATE(ds.summaryDate)) as days_coded,
+          RANK() OVER (ORDER BY SUM(ds.totalDuration) DESC) as rank
+        FROM User u
+        LEFT JOIN DailySummary ds ON u.id = ds.userId
+        WHERE ds.summaryDate BETWEEN ${start} AND ${end}
+        GROUP BY u.id, u.username, u.profile_url
+      )
+      SELECT *
+      FROM RankedUsers
+      WHERE id = ${userId}
+      OR rank <= 10
     `;
-    const codingDayCount = sessionDaysResult[0]?.day_count || 0;
-    const codingDailyAverage = codingDayCount > 0
-      ? Math.round(totalCodingTime / codingDayCount)
-      : 0;
 
-    const sessions = await prisma.codingSession.findMany({
-      where: { userId, startTime: { gte: start, lte: end } },
-      select: { languages: true }
-    });
-    const languagesUsed = Array.from(
-      new Set(sessions.flatMap(s => s.languages || []))
-    );
+    // Calculate goals progress
+    const goals = {
+      daily_coding_time: {
+        target: 14400, // 4 hours
+        current: currentSummary._sum.totalDuration || 0,
+        progress: ((currentSummary._sum.totalDuration || 0) / 14400) * 100
+      },
+      weekly_coding_days: {
+        target: 5,
+        current: currentDaily.length,
+        progress: (currentDaily.length / 5) * 100
+      }
+    };
 
     return res.json({
       data: {
@@ -177,19 +182,44 @@ router.get('/summary', authenticateUser, async (req, res) => {
           range,
           timezone: 'UTC'
         },
-        total_seconds: totalSeconds,
-        daily_average: dailyAverage,
-        languages: languageStats,
-        editors: editorStats,
-        projects: projectStats,
-        daily_stats: dailyStats,
-        best_days: bestDays, // Included bestDays data here
-        all_time: {
-          total_coding_time: totalCodingTime,
-          total_lines_written: totalLinesWritten,
-          languages_used: languagesUsed,
-          daily_average: codingDailyAverage
-        }
+        summary: {
+          total_seconds: currentSummary._sum.totalDuration || 0,
+          prev_period_seconds: prevSummary._sum.totalDuration || 0,
+          change_percentage: prevSummary._sum.totalDuration 
+            ? ((currentSummary._sum.totalDuration - prevSummary._sum.totalDuration) / prevSummary._sum.totalDuration) * 100 
+            : 0
+        },
+        daily_stats: currentDaily.map(day => ({
+          date: day.date.toISOString().split('T')[0],
+          total_seconds: parseFloat(day.total_seconds.toString()),
+          session_count: day.session_count
+        })),
+        languages: currentLanguages.map(lang => ({
+          language: lang.language,
+          heartbeat_count: lang.heartbeat_count,
+          total_seconds: parseFloat(lang.total_seconds.toString()),
+          percentage: lang.percentage
+        })),
+        lines_per_day: linesData.map(data => ({
+          date: data.startTime.toISOString().split('T')[0],
+          total_lines: data._sum.totalLines || 0
+        })),
+        recent_sessions: currentSessions.map(session => ({
+          start_time: session.startTime,
+          end_time: session.endTime,
+          duration: session.duration,
+          total_lines: session.totalLines,
+          languages: session.languages
+        })),
+        goals,
+        leaderboard: leaderboard.map(user => ({
+          id: user.id,
+          username: user.username,
+          profile_url: user.profile_url,
+          total_seconds: parseFloat(user.total_seconds.toString()),
+          days_coded: user.days_coded,
+          rank: user.rank
+        }))
       }
     });
 
