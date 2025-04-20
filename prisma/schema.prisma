@@ -183,8 +183,10 @@ model CodingSession {
   endTime   DateTime // ISO end time of session
   duration  Int // Duration in seconds (WakaTime uses float but we round here)
 
-  branch   String? // Optional: e.g., "main", "dev"
-  language String? // Optional: e.g., "JavaScript"
+  branch    String? // Optional: e.g., "main", "dev"
+  languages String[] // Optional: e.g., "JavaScript"
+
+  totalLines Int?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
