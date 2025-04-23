@@ -42,8 +42,12 @@ const { router: collaborationRouter, wsServer } = require('./routes/collaboratio
 const subscriptionsRouter = require('./routes/subscriptions');
 // const handleRoute=require('./routes/handleRoute');
 
-const app = express();
+const app = express();  
 
+app.use((req, res, next) => {
+  console.log(`→ ${req.method} ${req.originalUrl}`);
+  next(); // pass control to the next handler
+});
 app.set('redis', redis);
 
 app.use(helmet({
@@ -77,6 +81,7 @@ app.use(helmet({
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
   xssFilter: true
 }));
+
 
 
 app.use(
