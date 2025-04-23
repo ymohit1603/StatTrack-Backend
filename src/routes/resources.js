@@ -15,7 +15,7 @@ router.get('/machine-learning', authenticateUser, async (req, res) => {
         SELECT 
           DATE(timestamp) as coding_date,
           EXTRACT(HOUR FROM timestamp) as hour,
-          COUNT(*) as heartbeat_count,
+          COUNT(*) as Heartbeat_count,
           SUM(duration) as total_seconds
         FROM Heartbeat
         WHERE userId = ${req.user.id}

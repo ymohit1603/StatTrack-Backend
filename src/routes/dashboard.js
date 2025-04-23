@@ -58,7 +58,7 @@ router.get('/', [authenticateUser, checkHistoryAccess], async (req, res) => {
       comparisonStats
     ] = await Promise.all([
       // Overall coding statistics
-      prisma.heartbeat.aggregate({
+      prisma.Heartbeat.aggregate({
         where: {
           userId: req.user.id,
           timestamp: { gte: start, lte: end }
@@ -84,7 +84,7 @@ router.get('/', [authenticateUser, checkHistoryAccess], async (req, res) => {
       prisma.$queryRaw`
         SELECT 
           EXTRACT(HOUR FROM timestamp) as hour,
-          COUNT(*) as heartbeat_count,
+          COUNT(*) as Heartbeat_count,
           SUM(duration) as total_seconds,
           SUM(CASE WHEN is_write THEN lines ELSE 0 END) as lines_written,
           COUNT(DISTINCT entity) as files_touched
@@ -99,7 +99,7 @@ router.get('/', [authenticateUser, checkHistoryAccess], async (req, res) => {
       prisma.$queryRaw`
         SELECT 
           language,
-          COUNT(*) as heartbeat_count,
+          COUNT(*) as Heartbeat_count,
           SUM(duration) as total_seconds,
           SUM(CASE WHEN is_write THEN lines ELSE 0 END) as lines_written,
           COUNT(DISTINCT entity) as files_touched,
@@ -116,7 +116,7 @@ router.get('/', [authenticateUser, checkHistoryAccess], async (req, res) => {
       prisma.$queryRaw`
         SELECT 
           p.name as project_name,
-          COUNT(*) as heartbeat_count,
+          COUNT(*) as Heartbeat_count,
           SUM(h.duration) as total_seconds,
           SUM(CASE WHEN h.is_write THEN h.lines ELSE 0 END) as lines_written,
           COUNT(DISTINCT h.entity) as files_touched,
@@ -133,7 +133,7 @@ router.get('/', [authenticateUser, checkHistoryAccess], async (req, res) => {
       prisma.$queryRaw`
         SELECT 
           DATE(timestamp) as date,
-          COUNT(*) as heartbeat_count,
+          COUNT(*) as Heartbeat_count,
           SUM(duration) as total_seconds,
           SUM(CASE WHEN is_write THEN lines ELSE 0 END) as lines_written,
           COUNT(DISTINCT entity) as files_touched,
@@ -152,7 +152,7 @@ router.get('/', [authenticateUser, checkHistoryAccess], async (req, res) => {
     // Calculate summary statistics
     const summary = {
       total_coding_time: codingStats._sum.duration || 0,
-      total_heartbeats: codingStats._count || 0,
+      total_Heartbeats: codingStats._count || 0,
       total_lines_written: lineStats[0]?.total_lines_written || 0,
       files_modified: lineStats[0]?.files_modified || 0,
       max_lines_per_file: lineStats[0]?.max_lines_per_file || 0,

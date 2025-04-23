@@ -63,7 +63,7 @@ model User {
 
   // Relations
   projects       Project[]
-  heartbeats     Heartbeat[]
+  Heartbeats     Heartbeat[]
   codingSessions CodingSession[]
   dailySummaries DailySummary[]
   team           Team?           @relation(fields: [teamId], references: [id])
@@ -136,10 +136,10 @@ model Project {
   color                             String
   clients                           String[]
   has_public_url                    Boolean
-  human_readable_last_heartbeat_at  String
-  last_heartbeat_at                 String
-  human_readable_first_heartbeat_at String
-  first_heartbeat_at                String
+  human_readable_last_Heartbeat_at  String
+  last_Heartbeat_at                 String
+  human_readable_first_Heartbeat_at String
+  first_Heartbeat_at                String
   url                               String
   urlencoded_name                   String
   created_at                        DateTime @default(now())

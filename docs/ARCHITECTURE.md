@@ -7,22 +7,25 @@ CodeTime Analytics is built on a scalable architecture designed for high perform
 ## Core Components
 
 ### 1. API Gateway (Express.js)
+
 - Entry point for all client requests
 - Handles authentication and authorization
 - Rate limiting and request validation
 - Routes requests to appropriate services
-- Direct heartbeat processing
+- Direct Heartbeat processing
 
 ### 2. Data Storage Layer
 
 #### PostgreSQL with TimescaleDB
+
 - Stores time-series data for coding activities
 - Optimized for time-based queries
 - Automatic data partitioning and retention
 - Schema:
+
   ```sql
   -- Heartbeats table
-  CREATE TABLE heartbeats (
+  CREATE TABLE Heartbeats (
     id SERIAL PRIMARY KEY,
     user_id UUID,
     timestamp TIMESTAMPTZ,
@@ -35,15 +38,17 @@ CodeTime Analytics is built on a scalable architecture designed for high perform
   );
 
   -- Create hypertable
-  SELECT create_hypertable('heartbeats', 'timestamp');
+  SELECT create_hypertable('Heartbeats', 'timestamp');
   ```
 
 #### PostgreSQL (User Data)
+
 - Stores user profiles and metadata
 - Handles authentication data
 - Manages team and collaboration info
 
 #### Redis
+
 - Caching layer for frequent queries
 - Session management
 - Rate limiting counters
@@ -52,18 +57,21 @@ CodeTime Analytics is built on a scalable architecture designed for high perform
 ### 3. Background Processing
 
 #### Heartbeat Processing
+
 - Direct processing in API layer
 - Efficient batch processing
 - Deduplication logic
 - Real-time analytics updates
 
 #### Analytics Processing
+
 - Scheduled background jobs
 - Report generation
 - Trend analysis
 - Performance metrics calculation
 
 ### 4. WebSocket Server
+
 - Real-time updates
 - Live collaboration features
 - Instant notifications
@@ -86,12 +94,14 @@ graph TD
 ## Security Architecture
 
 ### Authentication Flow
+
 1. OAuth providers (Twitter, LinkedIn)
 2. JWT token generation
 3. Token validation middleware
 4. Role-based access control
 
 ### Data Protection
+
 - End-to-end encryption for sensitive data
 - Data anonymization for analytics
 - Regular security audits
@@ -99,40 +109,47 @@ graph TD
 ## Scalability Design
 
 ### Horizontal Scaling
+
 - Stateless API servers
 - Redis cluster for caching
 - Database read replicas
 
 ### Performance Optimizations
+
 1. Query Optimization
+
    - Materialized views
    - Efficient indexing
    - Query caching
 
 2. Caching Strategy
+
    - Multi-level caching
    - Cache invalidation patterns
    - Cache warming
 
 3. Batch Processing
-   - Efficient heartbeat batching
+   - Efficient Heartbeat batching
    - Background processing
    - Optimized database operations
 
 ## Monitoring and Observability
 
 ### Metrics Collection
+
 - Request latency
 - Error rates
 - System resources
 - Business metrics
 
 ### Logging
+
 - Structured logging
 - Log aggregation
 - Error tracking
 
 ### Alerting
+
 - Performance thresholds
 - Error spikes
 - System health
@@ -140,7 +157,9 @@ graph TD
 ## Disaster Recovery
 
 ### Backup Strategy
+
 1. Database Backups
+
    - Full daily backups
    - Incremental hourly backups
    - Point-in-time recovery
@@ -151,6 +170,7 @@ graph TD
    - Automated deployment
 
 ### Recovery Procedures
+
 1. Database Failover
 2. Service Restoration
 3. Data Consistency Checks
@@ -158,6 +178,7 @@ graph TD
 ## Development Workflow
 
 ### Code Organization
+
 ```
 src/
 ├── config/         # Configuration files
@@ -171,6 +192,7 @@ src/
 ```
 
 ### Testing Strategy
+
 1. Unit Tests
    - Individual components
    - Mocked dependencies
@@ -184,12 +206,15 @@ src/
 ## Future Considerations
 
 ### Planned Improvements
+
 1. Machine Learning Pipeline
+
    - Code pattern analysis
    - Productivity predictions
    - Anomaly detection
 
 2. Enhanced Analytics
+
    - Team productivity metrics
    - Project health indicators
    - Custom reporting engine

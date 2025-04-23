@@ -10,7 +10,7 @@ let chalk;
     console.log(chalk.bold.cyan("🌱 Starting seed for Mohit..."));
 
     console.log(chalk.yellow("🧹 Deleting existing data for Mohit (ID: 15)..."));
-    await prisma.heartbeat.deleteMany({ where: { userId: 15 } });
+    await prisma.Heartbeat.deleteMany({ where: { userId: 15 } });
     await prisma.codingSession.deleteMany({ where: { userId: 15 } });
     await prisma.dailySummary.deleteMany({ where: { userId: 15 } });
     await prisma.project.deleteMany({ where: { userId: 15 } });
@@ -29,10 +29,10 @@ let chalk;
           color: "#007ACC",
           clients: ["VS Code", "Chrome"],
           has_public_url: true,
-          human_readable_last_heartbeat_at: "5 minutes ago",
-          last_heartbeat_at: new Date().toISOString(),
-          human_readable_first_heartbeat_at: "1 month ago",
-          first_heartbeat_at: subDays(new Date(), 30).toISOString(),
+          human_readable_last_Heartbeat_at: "5 minutes ago",
+          last_Heartbeat_at: new Date().toISOString(),
+          human_readable_first_Heartbeat_at: "1 month ago",
+          first_Heartbeat_at: subDays(new Date(), 30).toISOString(),
           url: "https://github.com/ymohit1603/stattrack",
           urlencoded_name: "stattrack"
         }
@@ -46,10 +46,10 @@ let chalk;
           color: "#FF5722",
           clients: ["VS Code"],
           has_public_url: true,
-          human_readable_last_heartbeat_at: "10 minutes ago",
-          last_heartbeat_at: new Date().toISOString(),
-          human_readable_first_heartbeat_at: "2 months ago",
-          first_heartbeat_at: subDays(new Date(), 60).toISOString(),
+          human_readable_last_Heartbeat_at: "10 minutes ago",
+          last_Heartbeat_at: new Date().toISOString(),
+          human_readable_first_Heartbeat_at: "2 months ago",
+          first_Heartbeat_at: subDays(new Date(), 60).toISOString(),
           url: "https://github.com/ymohit1603/long-mail-memory",
           urlencoded_name: "long-mail-memory"
         }
@@ -60,9 +60,9 @@ let chalk;
     const languages = ["TypeScript", "JavaScript", "Python"];
     const categories = ["coding", "debugging", "building"];
 
-    console.log(chalk.yellow("💓 Creating heartbeats..."));
+    console.log(chalk.yellow("💓 Creating Heartbeats..."));
     for (let j = 0; j < 100; j++) {
-      await prisma.heartbeat.create({
+      await prisma.Heartbeat.create({
         data: {
           userId: 15,
           project: projects[Math.floor(Math.random() * projects.length)].name,
@@ -84,7 +84,7 @@ let chalk;
         }
       });
     }
-    console.log(chalk.green("✅ 100 heartbeats created."));
+    console.log(chalk.green("✅ 100 Heartbeats created."));
 
     console.log(chalk.yellow("⌨️  Creating coding sessions..."));
     for (let j = 0; j < 10; j++) {

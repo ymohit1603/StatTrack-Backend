@@ -1,17 +1,21 @@
 # CodeTime Analytics API Documentation
 
 ## Base URL
+
 ```
 http://localhost:3000/api/v1
 ```
 
 ## Authentication
+
 Most endpoints require authentication using a JWT token. Include the token in the Authorization header:
+
 ```
 Authorization: Bearer your_jwt_token
 ```
 
 ## Rate Limiting
+
 - Free tier: 1,000 requests per day
 - Standard tier: 10,000 requests per day
 - Enterprise tier: Unlimited requests
@@ -21,6 +25,7 @@ Authorization: Bearer your_jwt_token
 ### Authentication
 
 #### OAuth Login
+
 - Twitter Login
   ```http
   GET /auth/twitter
@@ -31,63 +36,78 @@ Authorization: Bearer your_jwt_token
   ```
 
 #### Get Current User
+
 ```http
 GET /users/current
 ```
+
 Returns the currently authenticated user's profile.
 
 ### Heartbeats
 
 #### Submit Heartbeats
+
 ```http
-POST /heartbeats
+POST /Heartbeats
 ```
+
 Submit coding activity data.
 
 **Request Body:**
+
 ```json
 {
-  "heartbeats": [{
-    "entity": "file/path",
-    "type": "file",
-    "category": "coding",
-    "time": "2025-04-06T10:28:10Z",
-    "project": "project-name",
-    "language": "javascript",
-    "lines": 100,
-    "lineDelta": 5
-  }]
+  "Heartbeats": [
+    {
+      "entity": "file/path",
+      "type": "file",
+      "category": "coding",
+      "time": "2025-04-06T10:28:10Z",
+      "project": "project-name",
+      "language": "javascript",
+      "lines": 100,
+      "lineDelta": 5
+    }
+  ]
 }
 ```
 
 ### Dashboard
 
 #### Get Activity Summary
+
 ```http
 GET /dashboard/summary
 ```
+
 Get coding activity summary for the current user.
 
 Query Parameters:
+
 - `start`: Start date (ISO format)
 - `end`: End date (ISO format)
 - `interval`: Data granularity (hour, day, week, month)
 
 #### Get Project Stats
+
 ```http
 GET /dashboard/projects
 ```
+
 Get statistics for all projects.
 
 ### Goals
 
 #### Create Goal
+
 ```http
 POST /goals
 ```
+
 Create a new coding goal.
 
 **Request Body:**
+
 ```json
 {
   "type": "daily_coding",
@@ -99,20 +119,25 @@ Create a new coding goal.
 ```
 
 #### Get Goals
+
 ```http
 GET /goals
 ```
+
 Get all goals for the current user.
 
 ### Preferences
 
 #### Update Preferences
+
 ```http
 PUT /preferences
 ```
+
 Update user preferences.
 
 **Request Body:**
+
 ```json
 {
   "theme": "dark",
@@ -127,12 +152,15 @@ Update user preferences.
 ### Reports
 
 #### Generate Report
+
 ```http
 POST /reports
 ```
+
 Generate a custom coding activity report.
 
 **Request Body:**
+
 ```json
 {
   "type": "activity",
@@ -148,12 +176,15 @@ Generate a custom coding activity report.
 ### Team Collaboration
 
 #### Create Team
+
 ```http
 POST /teams
 ```
+
 Create a new team.
 
 **Request Body:**
+
 ```json
 {
   "name": "Frontend Team",
@@ -162,12 +193,15 @@ Create a new team.
 ```
 
 #### Add Team Member
+
 ```http
 POST /teams/{teamId}/members
 ```
+
 Add a member to a team.
 
 **Request Body:**
+
 ```json
 {
   "email": "user@example.com",
@@ -180,6 +214,7 @@ Add a member to a team.
 All endpoints may return the following error responses:
 
 ### 400 Bad Request
+
 ```json
 {
   "error": "Invalid request parameters"
@@ -187,6 +222,7 @@ All endpoints may return the following error responses:
 ```
 
 ### 401 Unauthorized
+
 ```json
 {
   "error": "Authentication required"
@@ -194,6 +230,7 @@ All endpoints may return the following error responses:
 ```
 
 ### 403 Forbidden
+
 ```json
 {
   "error": "Insufficient permissions"
@@ -201,6 +238,7 @@ All endpoints may return the following error responses:
 ```
 
 ### 429 Too Many Requests
+
 ```json
 {
   "error": "Rate limit exceeded",
@@ -209,6 +247,7 @@ All endpoints may return the following error responses:
 ```
 
 ### 500 Internal Server Error
+
 ```json
 {
   "error": "Internal server error"
@@ -218,16 +257,18 @@ All endpoints may return the following error responses:
 ## Websocket API
 
 ### Connection
+
 ```javascript
-const ws = new WebSocket('ws://localhost:3000/api/v1/ws');
+const ws = new WebSocket("ws://localhost:3000/api/v1/ws");
 ```
 
 ### Events
 
 #### Heartbeat Update
+
 ```json
 {
-  "type": "heartbeat",
+  "type": "Heartbeat",
   "data": {
     "time": "2025-04-06T10:28:10Z",
     "project": "project-name",
@@ -237,6 +278,7 @@ const ws = new WebSocket('ws://localhost:3000/api/v1/ws');
 ```
 
 #### Goal Progress
+
 ```json
 {
   "type": "goal_progress",

@@ -12,7 +12,6 @@ router.get('/summary', authenticateUser, async (req, res) => {
 
     const userId = req.user.id;
 
-    // Get the user's createdAt date
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: { createdAt: true }
@@ -22,83 +21,79 @@ router.get('/summary', authenticateUser, async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Calculate range
     switch (range) {
       case 'today':
         start = new Date(now);
         start.setHours(0, 0, 0, 0);
-        end = new Date(start);
+        end = new Date(now);
         end.setHours(23, 59, 59, 999);
         break;
       case 'last_24_hours':
-        end = now;
-        start = new Date(now);
-        start.setHours(start.getHours() - 24);
+        end = new Date(now);
+        start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
         break;
       case 'last_7_days':
-        end = now;
-        start = new Date(now);
-        start.setDate(start.getDate() - 7);
+        end = new Date(now);
+        start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
         break;
       case 'last_30_days':
-        end = now;
-        start = new Date(now);
-        start.setDate(start.getDate() - 30);
+        end = new Date(now);
+        start = new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
         break;
       case 'last_6_months':
-        end = now;
-        start = new Date(now);
+        end = new Date(now);
+        start = new Date(end);
         start.setMonth(start.getMonth() - 6);
         break;
       case 'last_year':
-        end = now;
-        start = new Date(now);
+        end = new Date(now);
+        start = new Date(end);
         start.setFullYear(start.getFullYear() - 1);
         break;
       case 'all_years':
-        start = user.createdAt;
-        end = now;
+        start = new Date(user.createdAt);
+        end = new Date(now);
         break;
       default:
         return res.status(400).json({ error: 'Invalid range parameter' });
     }
 
-    // Get previous period for comparison
-    const prevStart = new Date(start);
-    const prevEnd = new Date(end);
-    const diff = end.getTime() - start.getTime();
-    prevStart.setTime(prevStart.getTime() - diff);
-    prevEnd.setTime(prevEnd.getTime() - diff);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({ error: 'Invalid date range calculated' });
+    }
 
-    // Fetch current period data
+    const diff = end.getTime() - start.getTime();
+    const prevStart = new Date(start.getTime() - diff);
+    const prevEnd = new Date(end.getTime() - diff);
+
     const [currentSummary, currentDaily, currentLanguages, currentSessions] = await Promise.all([
       prisma.dailySummary.aggregate({
         where: { userId, summaryDate: { gte: start, lte: end } },
         _sum: { totalDuration: true },
       }),
       prisma.$queryRaw`
-        SELECT DATE(summaryDate) as date, 
-               SUM(totalDuration) as total_seconds,
+        SELECT DATE("summaryDate") as date, 
+               SUM("totalDuration") as total_seconds,
                COUNT(*) as session_count
-        FROM DailySummary
-        WHERE userId = ${userId} 
-        AND summaryDate BETWEEN ${start} AND ${end}
-        GROUP BY DATE(summaryDate)
+        FROM "DailySummary"
+        WHERE "userId" = ${userId} 
+        AND "summaryDate" BETWEEN ${start} AND ${end}
+        GROUP BY DATE("summaryDate")
         ORDER BY date ASC
       `,
       prisma.$queryRaw`
-        SELECT language, 
-               COUNT(*) as heartbeat_count,
-               SUM(duration) as total_seconds,
-               ROUND(SUM(duration)*100.0/(
-                 SELECT SUM(duration) FROM Heartbeat
-                 WHERE userId=${userId} AND timestamp BETWEEN ${start} AND ${end}
-               ),2) as percentage
-        FROM Heartbeat
-        WHERE userId=${userId} 
-        AND timestamp BETWEEN ${start} AND ${end}
-        AND language IS NOT NULL
-        GROUP BY language
+        SELECT "language", 
+               COUNT(*) as "Heartbeat_count",
+               SUM("duration") as total_seconds,
+               ROUND(SUM("duration") * 100.0 / (
+                 SELECT SUM("duration") FROM "Heartbeat"
+                 WHERE "userId" = ${userId} AND "timestamp" BETWEEN ${start} AND ${end}
+               ), 2) as percentage
+        FROM "Heartbeat"
+        WHERE "userId" = ${userId} 
+        AND "timestamp" BETWEEN ${start} AND ${end}
+        AND "language" IS NOT NULL
+        GROUP BY "language"
         ORDER BY total_seconds DESC
       `,
       prisma.codingSession.findMany({
@@ -118,13 +113,11 @@ router.get('/summary', authenticateUser, async (req, res) => {
       })
     ]);
 
-    // Fetch previous period data for comparison
     const prevSummary = await prisma.dailySummary.aggregate({
       where: { userId, summaryDate: { gte: prevStart, lte: prevEnd } },
       _sum: { totalDuration: true },
     });
 
-    // Get lines added data
     const linesData = await prisma.codingSession.groupBy({
       by: ['startTime'],
       where: {
@@ -139,31 +132,29 @@ router.get('/summary', authenticateUser, async (req, res) => {
       }
     });
 
-    // Get leaderboard history
     const leaderboard = await prisma.$queryRaw`
       WITH RankedUsers AS (
         SELECT 
-          u.id,
-          u.username,
-          u.profile_url,
-          SUM(ds.totalDuration) as total_seconds,
-          COUNT(DISTINCT DATE(ds.summaryDate)) as days_coded,
-          RANK() OVER (ORDER BY SUM(ds.totalDuration) DESC) as rank
-        FROM User u
-        LEFT JOIN DailySummary ds ON u.id = ds.userId
-        WHERE ds.summaryDate BETWEEN ${start} AND ${end}
-        GROUP BY u.id, u.username, u.profile_url
+          u."id",
+          u."username",
+          u."profile_url",
+          SUM(ds."totalDuration") as total_seconds,
+          COUNT(DISTINCT DATE(ds."summaryDate")) as days_coded,
+          RANK() OVER (ORDER BY SUM(ds."totalDuration") DESC) as rank
+        FROM "User" u
+        LEFT JOIN "DailySummary" ds ON u."id" = ds."userId"
+        WHERE ds."summaryDate" BETWEEN ${start} AND ${end}
+        GROUP BY u."id", u."username", u."profile_url"
       )
       SELECT *
       FROM RankedUsers
-      WHERE id = ${userId}
+      WHERE "id" = ${userId}
       OR rank <= 10
     `;
 
-    // Calculate goals progress
     const goals = {
       daily_coding_time: {
-        target: 14400, // 4 hours
+        target: 14400,
         current: currentSummary._sum.totalDuration || 0,
         progress: ((currentSummary._sum.totalDuration || 0) / 14400) * 100
       },
@@ -190,15 +181,15 @@ router.get('/summary', authenticateUser, async (req, res) => {
             : 0
         },
         daily_stats: currentDaily.map(day => ({
-          date: day.date.toISOString().split('T')[0],
-          total_seconds: parseFloat(day.total_seconds.toString()),
-          session_count: day.session_count
+          date: day.date?.toISOString().split('T')[0] || '',
+          total_seconds: Number(day.total_seconds),
+          session_count: Number(day.session_count)
         })),
         languages: currentLanguages.map(lang => ({
           language: lang.language,
-          heartbeat_count: lang.heartbeat_count,
-          total_seconds: parseFloat(lang.total_seconds.toString()),
-          percentage: lang.percentage
+          Heartbeat_count: Number(lang.Heartbeat_count),
+          total_seconds: Number(lang.total_seconds),
+          percentage: Number(lang.percentage)
         })),
         lines_per_day: linesData.map(data => ({
           date: data.startTime.toISOString().split('T')[0],
@@ -216,9 +207,9 @@ router.get('/summary', authenticateUser, async (req, res) => {
           id: user.id,
           username: user.username,
           profile_url: user.profile_url,
-          total_seconds: parseFloat(user.total_seconds.toString()),
-          days_coded: user.days_coded,
-          rank: user.rank
+          total_seconds: Number(user.total_seconds),
+          days_coded: Number(user.days_coded),
+          rank: Number(user.rank)
         }))
       }
     });
@@ -229,10 +220,6 @@ router.get('/summary', authenticateUser, async (req, res) => {
   }
 });
 
-module.exports = router;
-
-
-    
 // GET /heatmap?year=<year>
 router.get('/heatmap', authenticateUser, async (req, res) => {
   try {
@@ -261,7 +248,7 @@ router.get('/heatmap', authenticateUser, async (req, res) => {
 
     const heatmap = rows.map(r => ({
       date: r.summaryDate.toISOString().split('T')[0],
-      total_seconds: parseFloat(r.totalDuration.toString())
+      total_seconds: Number(r.totalDuration)
     }));
 
     return res.json({ data: heatmap });
@@ -270,6 +257,5 @@ router.get('/heatmap', authenticateUser, async (req, res) => {
     return res.status(500).json({ error: 'Internal server error' });
   }
 });
-
 
 module.exports = router;

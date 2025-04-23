@@ -46,7 +46,7 @@ router.get('/dashboard', authenticateUser, async (req, res) => {
           SUM(duration) as total_seconds,
           SUM(lines) as total_lines,
           COUNT(DISTINCT entity) as files_touched,
-          COUNT(*) as heartbeat_count,
+          COUNT(*) as Heartbeat_count,
           COUNT(DISTINCT CASE WHEN is_write THEN entity END) as files_modified
         FROM Heartbeat
         WHERE userId = ${req.user.id}
@@ -61,7 +61,7 @@ router.get('/dashboard', authenticateUser, async (req, res) => {
         MAX(total_lines) as most_lines_in_day,
         SUM(files_touched) as total_files_touched,
         SUM(files_modified) as total_files_modified,
-        SUM(heartbeat_count) as total_heartbeats,
+        SUM(Heartbeat_count) as total_Heartbeats,
         json_agg(json_build_object(
           'date', date,
           'coding_time', total_seconds,
@@ -160,7 +160,7 @@ router.get('/dashboard', authenticateUser, async (req, res) => {
       summary: {
         ...codingStats[0],
         lines_per_hour: Math.round(codingStats[0].total_lines_written / (codingStats[0].total_coding_time / 3600)),
-        avg_session_lines: Math.round(codingStats[0].total_lines_written / codingStats[0].total_heartbeats)
+        avg_session_lines: Math.round(codingStats[0].total_lines_written / codingStats[0].total_Heartbeats)
       },
       time_tracking: {
         range: {
@@ -275,7 +275,7 @@ router.get('/productivity', authenticateUser, async (req, res) => {
         SELECT 
           EXTRACT(HOUR FROM timestamp) as hour,
           AVG(duration) as avg_duration,
-          COUNT(*) as heartbeat_count
+          COUNT(*) as Heartbeat_count
         FROM Heartbeat
         WHERE userId = ${req.user.id}
           AND timestamp BETWEEN ${start} AND ${end}
@@ -284,7 +284,7 @@ router.get('/productivity', authenticateUser, async (req, res) => {
       SELECT 
         hour,
         avg_duration,
-        heartbeat_count,
+        Heartbeat_count,
         CASE 
           WHEN avg_duration > (SELECT AVG(avg_duration) + STDDEV(avg_duration) FROM hourly_stats) THEN 'peak'
           WHEN avg_duration < (SELECT AVG(avg_duration) - STDDEV(avg_duration) FROM hourly_stats) THEN 'low'
@@ -369,7 +369,7 @@ router.get('/productivity', authenticateUser, async (req, res) => {
             .filter(h => h.productivity_level === 'peak')
             .map(h => h.hour),
           recommended_focus_times: hourlyPatterns
-            .filter(h => h.productivity_level === 'peak' && h.heartbeat_count > 100)
+            .filter(h => h.productivity_level === 'peak' && h.Heartbeat_count > 100)
             .map(h => h.hour)
         },
         project_insights: {

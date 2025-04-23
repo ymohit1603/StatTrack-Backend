@@ -73,46 +73,46 @@ router.get('/:userId/summaries', async (req, res) => {
 
 
 
-// Get user stats
-router.get('/:userId/stats/:range', async (req, res) => {
-  try {
-    const { userId, range } = req.params;
-    const end = new Date();
-    let start = new Date();
+// // Get user stats
+// router.get('/:userId/stats/:range', async (req, res) => {
+//   try {
+//     const { userId, range } = req.params;
+//     const end = new Date();
+//     let start = new Date();
 
-    switch (range) {
-      case 'last_7_days':
-        start.setDate(start.getDate() - 7);
-        break;
-      case 'last_30_days':
-        start.setDate(start.getDate() - 30);
-        break;
-      case 'last_6_months':
-        start.setMonth(start.getMonth() - 6);
-        break;
-      case 'last_year':
-        start.setFullYear(start.getFullYear() - 1);
-        break;
-      default:
-        return res.status(400).json({ error: 'Invalid range' });
-    }
+//     switch (range) {
+//       case 'last_7_days':
+//         start.setDate(start.getDate() - 7);
+//         break;
+//       case 'last_30_days':
+//         start.setDate(start.getDate() - 30);
+//         break;
+//       case 'last_6_months':
+//         start.setMonth(start.getMonth() - 6);
+//         break;
+//       case 'last_year':
+//         start.setFullYear(start.getFullYear() - 1);
+//         break;
+//       default:
+//         return res.status(400).json({ error: 'Invalid range' });
+//     }
 
-    const stats = await prisma.$queryRaw`
-      SELECT 
-        SUM(totalDuration) as total_seconds,
-        COUNT(DISTINCT DATE(summaryDate)) as days_coded,
-        AVG(totalDuration) as daily_average,
-        MAX(totalDuration) as best_day
-      FROM DailySummary
-      WHERE userId = ${parseInt(userId)}
-        AND summaryDate BETWEEN ${start} AND ${end}
-    `;
+//     const stats = await prisma.$queryRaw`
+//       SELECT 
+//         SUM(totalDuration) as total_seconds,
+//         COUNT(DISTINCT DATE(summaryDate)) as days_coded,
+//         AVG(totalDuration) as daily_average,
+//         MAX(totalDuration) as best_day
+//       FROM DailySummary
+//       WHERE userId = ${parseInt(userId)}
+//         AND summaryDate BETWEEN ${start} AND ${end}
+//     `;
 
-    res.json({ data: stats[0] });
-  } catch (error) {
-    logger.error('Error fetching user stats:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+//     res.json({ data: stats[0] });
+//   } catch (error) {
+//     logger.error('Error fetching user stats:', error);
+//     res.status(500).json({ error: 'Internal server error' });
+//   }
+// });
 
 module.exports = router; 

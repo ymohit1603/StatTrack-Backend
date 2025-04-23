@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   app:
@@ -15,14 +15,14 @@ services:
       - postgres
       - timescale
       - redis
-      - kafka  
+      - kafka
     restart: unless-stopped
     networks:
       - codetime-network
 
   worker:
     build: .
-    command: node src/workers/heartbeatWorker.js
+    command: node src/workers/HeartbeatWorker.js
     environment:
       - NODE_ENV=production
       - TIMESCALE_HOST=timescale
@@ -123,4 +123,4 @@ volumes:
 
 networks:
   codetime-network:
-    driver: bridge 
+    driver: bridge

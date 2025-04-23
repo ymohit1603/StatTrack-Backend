@@ -28,7 +28,7 @@ const {
 const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
 const projectsRoutes = require('./routes/projects');
-const heartbeatsRoutes = require('./routes/heartbeats');
+const HeartbeatsRoutes = require('./routes/heartbeats');
 const statsRoutes = require('./routes/stats');
 const goalsRoutes = require('./routes/goals');
 const leaderboardsRoutes = require('./routes/leaderboards');
@@ -150,7 +150,7 @@ app.use(morgan('combined', {
   skip: (req) => req.path === '/health'
 }));
 
-const API_PREFIX = `/api/${process.env.API_VERSION || 'v1'}`;
+const API_PREFIX = `/api/v1`;
 
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -172,10 +172,10 @@ app.use(
   projectsRoutes
 );
 
-// Heartbeats endpoint: /users/current/heartbeats
+// Heartbeats endpoint: /users/current/Heartbeats
 app.use(
   `${API_PREFIX}/users/current/heartbeats.bulk`,
-  heartbeatsRoutes
+  HeartbeatsRoutes
 );
 
 // Summaries endpoint: /users/current/summaries
@@ -186,11 +186,11 @@ app.use(
 // );
 
 // Stats endpoint: /users/current/stats
-// app.use(
-//   `${API_PREFIX}/users/current/stats`,
-//   [apiLimiter, checkApiLimit],
-//   statsRoutes
-// );
+app.use(
+  `${API_PREFIX}/users/current/stats`,
+  // [apiLimiter, checkApiLimit],
+  statsRoutes
+);
 
 // Durations endpoints for current user.
 app.use(

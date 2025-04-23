@@ -33,7 +33,7 @@ router.get('/', authenticateUser, async (req, res) => {
 //       include: {
 //         _count: {
 //           select: {
-//             heartbeats: true,
+//             Heartbeats: true,
 //             codingSessions: true
 //           }
 //         }
@@ -157,7 +157,7 @@ router.get('/', authenticateUser, async (req, res) => {
 //     const stats = await prisma.$queryRaw`
 //       SELECT 
 //         h.language,
-//         COUNT(*) as total_heartbeats,
+//         COUNT(*) as total_Heartbeats,
 //         SUM(h.duration) as total_seconds
 //       FROM Heartbeat h
 //       WHERE h.projectId = ${parseInt(req.params.id)}

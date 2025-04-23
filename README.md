@@ -4,7 +4,7 @@ A high-performance backend system for tracking and analyzing coding activity dat
 
 ## Features
 
-- Real-time heartbeat ingestion with deduplication
+- Real-time Heartbeat ingestion with deduplication
 - Scalable architecture using Kafka for message processing
 - Time-series data storage with TimescaleDB
 - Redis caching for improved performance
@@ -22,17 +22,20 @@ A high-performance backend system for tracking and analyzing coding activity dat
 ## Quick Start
 
 1. Clone the repository:
+
    ```bash
    git clone https://github.com/yourusername/codetime-analytics-backend.git
    cd codetime-analytics-backend
    ```
 
 2. Install dependencies:
+
    ```bash
    npm install
    ```
 
 3. Configure environment variables:
+
    ```bash
    cp .env.example .env
    # Edit .env with your configuration
@@ -46,16 +49,19 @@ A high-performance backend system for tracking and analyzing coding activity dat
 ## API Documentation
 
 ### Heartbeat Ingestion
-- `POST /api/v1/heartbeats`
-- Accepts an array of heartbeat events
+
+- `POST /api/v1/Heartbeats`
+- Accepts an array of Heartbeat events
 - Requires API key authentication
 
 ### User Dashboard
+
 - `GET /api/v1/summary`
 - Retrieves coding activity summary
 - Supports various time ranges
 
 ### API Key Management
+
 - `POST /api/v1/auth/key`
 - Generates new API keys for users
 - Requires user authentication
@@ -73,11 +79,13 @@ The system uses a microservices architecture with the following components:
 ## Development
 
 ### Running Tests
+
 ```bash
 npm test
 ```
 
 ### Code Style
+
 ```bash
 npm run lint
 ```
@@ -93,7 +101,7 @@ docker-compose up
 
 ## Performance
 
-- Handles 10,000+ heartbeats/minute
+- Handles 10,000+ Heartbeats/minute
 - API response time < 500ms
 - 99.9% uptime guarantee
 

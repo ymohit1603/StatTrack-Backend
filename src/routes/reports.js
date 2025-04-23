@@ -25,7 +25,7 @@ router.get('/team-performance', authenticateUser, async (req, res) => {
           u.id as user_id,
           u.username,
           DATE(h.timestamp) as date,
-          COUNT(*) as heartbeat_count,
+          COUNT(*) as Heartbeat_count,
           COUNT(DISTINCT h.entity) as files_modified,
           SUM(h.duration) as coding_seconds
         FROM "User" u
@@ -41,7 +41,7 @@ router.get('/team-performance', authenticateUser, async (req, res) => {
         ROUND(AVG(coding_seconds)::numeric, 2) as avg_daily_seconds,
         SUM(coding_seconds) as total_seconds,
         SUM(files_modified) as total_files_modified,
-        ROUND(AVG(heartbeat_count)::numeric, 2) as avg_daily_activity
+        ROUND(AVG(Heartbeat_count)::numeric, 2) as avg_daily_activity
       FROM daily_stats
       GROUP BY user_id, username
       ORDER BY total_seconds DESC

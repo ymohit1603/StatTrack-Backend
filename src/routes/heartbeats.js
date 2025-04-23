@@ -7,19 +7,19 @@ const { processHeartbeats } = require('../workers/heartbeatWorker');
 const { checkApiLimit, checkStorageLimit } = require('../middleware/tierLimits');
 const os = require('os');
 
-// Create heartbeat(s)
+// Create Heartbeat(s)
 router.post('/', async (req, res) => {
   console.log("req",req.body);
   console.log("req.user",req.user);
   try {
-    let heartbeats = Array.isArray(req.body) ? req.body : [req.body];
+    let Heartbeats = Array.isArray(req.body) ? req.body : [req.body];
     
 
     
     
 
-    if (heartbeats.length === 0) {
-      return res.status(400).json({ error: 'Invalid heartbeat data' });
+    if (Heartbeats.length === 0) {
+      return res.status(400).json({ error: 'Invalid Heartbeat data' });
     }
 
 
@@ -28,7 +28,7 @@ router.post('/', async (req, res) => {
     // const today = new Date().toISOString().split('T')[0];
     // await redis.hincrby(`user:${req.user.id}:usage:${today}`, 'api_requests', 1);
     
-    // Check for premium features in heartbeats
+    // Check for premium features in Heartbeats
     // const hasPremiumFeatures = transformedHeartbeats.some(hb => 
     //   hb.dependencies?.length > 0 || 
     //   hb.lines > 1000 ||
@@ -39,20 +39,20 @@ router.post('/', async (req, res) => {
     //   await redis.hincrby(`user:${req.user.id}:usage:${today}`, 'premium_features', 1);
     // }
 
-    // Process heartbeats directly
+    // Process Heartbeats directly
     const processedCount = await processHeartbeats(req);
 
     res.json({
       status: 'success',
-      message: `Processed ${processedCount} heartbeats`
+      message: `Processed ${processedCount} Heartbeats`
     });
   } catch (error) {
-    logger.error('Error processing heartbeats:', error);
-    res.status(500).json({ error: 'Error processing heartbeats' });
+    logger.error('Error processing Heartbeats:', error);
+    res.status(500).json({ error: 'Error processing Heartbeats' });
   }
 });
 
-// user's heartbeat sent from  cli for the given day as an array
+// user's Heartbeat sent from  cli for the given day as an array
 // date - Date - required - Requested day; Heartbeats will be returned from 12am until 11:59pm in user's timezone for this day.
 
 

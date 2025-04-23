@@ -3,8 +3,8 @@ const logger = require('../utils/logger');
 
 const BATCH_SIZE = 1000;
 
-function groupHeartbeats(heartbeats) {
-  return heartbeats.reduce((acc, hb) => {
+function groupHeartbeats(Heartbeats) {
+  return Heartbeats.reduce((acc, hb) => {
     acc.languages.add(hb.language || 'unknown');
     acc.projects.add({
       name: hb.project || 'unknown',
@@ -42,12 +42,12 @@ async function storeSession(userId, projectId, session) {
   }
 }
 
-async function updateCodingSessions(heartbeats) {
+async function updateCodingSessions(Heartbeats) {
   const sessionGroups = {};
   const TIMEOUT = 15 * 60; // 15 minutes in seconds
 
-  // Group heartbeats by userId + projectId
-  for (const hb of heartbeats) {
+  // Group Heartbeats by userId + projectId
+  for (const hb of Heartbeats) {
     const key = `${hb.userId}-${hb.projectId || 'unknown'}`;
     if (!sessionGroups[key]) sessionGroups[key] = [];
     sessionGroups[key].push(hb);
@@ -80,34 +80,34 @@ async function updateCodingSessions(heartbeats) {
   }
 }
 
-async function processBatch(heartbeats) {
+async function processBatch(Heartbeats) {
   try {
     
-    await prisma.heartbeat.createMany({
-      data: heartbeats,
+    await prisma.Heartbeat.createMany({
+      data: Heartbeats,
       skipDuplicates: true
     });
 
 
 
-    await updateCodingSessions(heartbeats);
+    await updateCodingSessions(Heartbeats);
 
-    logger.info(`Processed ${heartbeats.length} heartbeats`);
+    logger.info(`Processed ${Heartbeats.length} Heartbeats`);
   } catch (error) {
     logger.error('Batch processing error:', error);
   }
 }
 
-async function processHeartbeats(heartbeats) {
+async function processHeartbeats(Heartbeats) {
   try {
-    for (let i = 0; i < heartbeats.length; i += BATCH_SIZE) {
-      const batch = heartbeats.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < Heartbeats.length; i += BATCH_SIZE) {
+      const batch = Heartbeats.slice(i, i + BATCH_SIZE);
       await processBatch(batch);
       logger.info(`Processed batch of ${batch.length}`);
     }
-    return heartbeats.body.length;
+    return Heartbeats.body.length;
   } catch (error) {
-    logger.error('Error processing heartbeats:', error);
+    logger.error('Error processing Heartbeats:', error);
     throw error;
   }
 }
