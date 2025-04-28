@@ -69,6 +69,11 @@ model User {
   team           Team?           @relation(fields: [teamId], references: [id])
   invoices       Invoice[]
   apiKeys        ApiKey[]
+  tokens         Token[]
+  usageTracking  UsageTracking[]
+  connectionTracking ConnectionTracking[]
+  aiUsageTracking AiUsageTracking[]
+  preferences    UserPreferences?
 
   @@index([twitterId])
   @@index([linkedinId])
@@ -204,4 +209,65 @@ model DailySummary {
   totalEvents   Int
 
   @@unique([userId, projectId, summaryDate]) // Avoid duplicate summaries
+}
+
+model Token {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model UsageTracking {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  limitType String
+  date      DateTime
+  count     Int      @default(0)
+  duration  Int      @default(0)  // Duration in seconds
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, limitType, date])
+}
+
+model ConnectionTracking {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, date])
+}
+
+model AiUsageTracking {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id])
+  month     String
+  minutes   Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, month])
+}
+
+model UserPreferences {
+  id            Int      @id @default(autoincrement())
+  userId        Int      @unique
+  user          User     @relation(fields: [userId], references: [id])
+  dashboard     Json?
+  notifications Json?
+  appearance    Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

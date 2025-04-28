@@ -1,4 +1,4 @@
-const { prisma, redis } = require('../config/db');
+const { prisma } = require('../config/db');
 const logger = require('../utils/logger');
 
 const TIER_LIMITS = {
@@ -101,21 +101,12 @@ const TIER_LIMITS = {
 };
 
 async function getUserTier(userId) {
-  const cachedTier = await redis.get(`user:${userId}:tier`);
-  if (cachedTier) {
-    return cachedTier;
-  }
-
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { subscriptionTier: true }
   });
 
-  const tier = user?.subscriptionTier || 'FREE';
-  
-  await redis.set(`user:${userId}:tier`, tier, 'EX', 300);
-  
-  return tier;
+  return user?.subscriptionTier || 'FREE';
 }
 
 async function checkUsageLimit(userId, limitType) {
@@ -125,15 +116,40 @@ async function checkUsageLimit(userId, limitType) {
   if (!limits[limitType] || limits[limitType] === -1) return true;
 
   const today = new Date().toISOString().split('T')[0];
-  const usageKey = `usage:${userId}:${limitType}:${today}`;
   
-  const currentUsage = await redis.incr(usageKey);
-  
-  if (currentUsage === 1) {
-    await redis.expire(usageKey, 86400); 
+  // Get usage from database
+  const usage = await prisma.usageTracking.findFirst({
+    where: {
+      userId,
+      limitType,
+      date: today
+    }
+  });
+
+  if (!usage) {
+    // Create new usage record
+    await prisma.usageTracking.create({
+      data: {
+        userId,
+        limitType,
+        date: today,
+        count: 1
+      }
+    });
+    return true;
   }
-  
-  return currentUsage <= limits[limitType];
+
+  if (usage.count >= limits[limitType]) {
+    return false;
+  }
+
+  // Increment usage
+  await prisma.usageTracking.update({
+    where: { id: usage.id },
+    data: { count: usage.count + 1 }
+  });
+
+  return true;
 }
 
 async function checkProjectLimit(req, res, next) {
@@ -234,24 +250,47 @@ async function checkConcurrentConnections(req, res, next) {
     const tier = await getUserTier(req.user.id);
     const limits = TIER_LIMITS[tier];
     
-    const connectionsKey = `connections:${req.user.id}`;
-    const connections = await redis.incr(connectionsKey);
-    
-    if (connections === 1) {
-      await redis.expire(connectionsKey, 3600); 
-    }
+    const connections = await prisma.connectionTracking.findFirst({
+      where: {
+        userId: req.user.id,
+        date: new Date().toISOString().split('T')[0]
+      }
+    });
 
-    if (connections > limits.concurrentConnections) {
-      await redis.decr(connectionsKey);
+    if (!connections) {
+      await prisma.connectionTracking.create({
+        data: {
+          userId: req.user.id,
+          date: new Date().toISOString().split('T')[0],
+          count: 1
+        }
+      });
+    } else if (connections.count >= limits.concurrentConnections) {
       return res.status(429).json({
         error: 'Too many concurrent connections',
         limit: limits.concurrentConnections,
         upgrade_url: '/api/v1/subscriptions/plans'
       });
+    } else {
+      await prisma.connectionTracking.update({
+        where: { id: connections.id },
+        data: { count: connections.count + 1 }
+      });
     }
 
     res.on('finish', async () => {
-      await redis.decr(connectionsKey);
+      const conn = await prisma.connectionTracking.findFirst({
+        where: {
+          userId: req.user.id,
+          date: new Date().toISOString().split('T')[0]
+        }
+      });
+      if (conn) {
+        await prisma.connectionTracking.update({
+          where: { id: conn.id },
+          data: { count: Math.max(0, conn.count - 1) }
+        });
+      }
     });
 
     next();
@@ -358,17 +397,31 @@ async function checkExportAccess(req, res, next) {
 async function trackAiMinutes(userId, minutes) {
   const today = new Date();
   const monthKey = `${today.getFullYear()}-${today.getMonth() + 1}`;
-  const usageKey = `ai:minutes:${userId}:${monthKey}`;
   
-  const currentUsage = parseInt(await redis.get(usageKey) || '0');
-  const newUsage = currentUsage + minutes;
-  
-  await redis.set(usageKey, newUsage);
-  
-  const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  const ttl = Math.floor((nextMonth - today) / 1000);
-  await redis.expire(usageKey, ttl);
-  
+  const usage = await prisma.aiUsageTracking.findFirst({
+    where: {
+      userId,
+      month: monthKey
+    }
+  });
+
+  if (!usage) {
+    await prisma.aiUsageTracking.create({
+      data: {
+        userId,
+        month: monthKey,
+        minutes
+      }
+    });
+    return minutes;
+  }
+
+  const newUsage = usage.minutes + minutes;
+  await prisma.aiUsageTracking.update({
+    where: { id: usage.id },
+    data: { minutes: newUsage }
+  });
+
   return newUsage;
 }
 

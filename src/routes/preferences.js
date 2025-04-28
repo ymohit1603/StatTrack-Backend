@@ -88,27 +88,34 @@ router.put('/', authenticateUser, async (req, res) => {
       }
     });
 
-    // Store extended preferences in Redis for faster access
-    const redis = req.app.get('redis');
-    const extendedPreferences = {
-      dashboard,
-      goals,
-      notifications,
-      integrations,
-      privacy
-    };
-
-    await redis.set(
-      `user:${req.user.id}:preferences`,
-      JSON.stringify(extendedPreferences),
-      'EX',
-      86400 // Cache for 24 hours
-    );
+    // Store extended preferences in database
+    await prisma.userPreferences.upsert({
+      where: { userId: req.user.id },
+      update: {
+        dashboard,
+        goals,
+        notifications,
+        integrations,
+        privacy
+      },
+      create: {
+        userId: req.user.id,
+        dashboard,
+        goals,
+        notifications,
+        integrations,
+        privacy
+      }
+    });
 
     res.json({
       data: {
         ...user,
-        ...extendedPreferences
+        dashboard,
+        goals,
+        notifications,
+        integrations,
+        privacy
       }
     });
   } catch (error) {

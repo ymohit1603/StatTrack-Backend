@@ -6,7 +6,7 @@ const LinkedInStrategy = require('passport-linkedin-oauth2').Strategy;
 const jwt = require('jsonwebtoken');
 const { jwtDecode } = require('jwt-decode');
 const logger = require('../utils/logger');
-const { prisma, redis } = require('../config/db');
+const { prisma } = require('../config/db');
 
 const USER_CACHE_TTL = 3600;
 const TOKEN_CACHE_TTL = 86400;
@@ -128,12 +128,14 @@ router.get('/twitter/callback',
         { expiresIn: '24h' }
       );
 
-      await redis.set(
-        `token:${token}`,
-        req.user.id,
-        'EX',
-        TOKEN_CACHE_TTL
-      );
+      // Store token in database
+      await prisma.token.create({
+        data: {
+          token,
+          userId: req.user.id,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        }
+      });
 
       res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
     } catch (error) {
@@ -155,12 +157,14 @@ router.get('/linkedin/callback',
         { expiresIn: '24h' }
       );
 
-      await redis.set(
-        `token:${token}`,
-        req.user.id,
-        'EX',
-        TOKEN_CACHE_TTL
-      );
+      // Store token in database
+      await prisma.token.create({
+        data: {
+          token,
+          userId: req.user.id,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        }
+      });
 
       res.redirect(`${process.env.FRONTEND_URL}/auth/callback?token=${token}`);
     } catch (error) {
@@ -234,7 +238,9 @@ router.post('/logout', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (token) {
-      await redis.del(`token:${token}`);
+      await prisma.token.delete({
+        where: { token }
+      });
     }
     res.json({ message: 'Logged out successfully' });
   } catch (error) {

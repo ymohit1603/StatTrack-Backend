@@ -2,12 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { authenticateUser } = require('../middleware/auth');
 const logger = require('../utils/logger');
-const { prisma, redis } = require('../config/db');
+const { prisma } = require('../config/db');
 
 // Get system status
 router.get('/', authenticateUser, async (req, res) => {
   try {
-    const redisStatus = await checkRedisStatus();
     const dbStatus = await checkDatabaseStatus();
 
     res.json({
@@ -21,10 +20,6 @@ router.get('/', authenticateUser, async (req, res) => {
         database: {
           status: dbStatus ? 'healthy' : 'error',
           type: 'PostgreSQL'
-        },
-        cache: {
-          status: redisStatus ? 'healthy' : 'error',
-          type: 'Redis'
         }
       }
     });
@@ -33,17 +28,6 @@ router.get('/', authenticateUser, async (req, res) => {
     res.status(500).json({ error: 'Error checking system status' });
   }
 });
-
-// Check Redis connection
-async function checkRedisStatus() {
-  try {
-    await redis.ping();
-    return true;
-  } catch (error) {
-    logger.error('Redis health check failed:', error);
-    return false;
-  }
-}
 
 // Check database connection
 async function checkDatabaseStatus() {

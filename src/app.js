@@ -335,7 +335,6 @@ const server = http.createServer(app);
 
 const shutdown = async () => {
   try {
-    await redis.quit();
     server.close(() => {
       logger.info('Server closed');
       process.exit(0);

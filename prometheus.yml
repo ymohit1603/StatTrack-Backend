@@ -21,10 +21,6 @@ scrape_configs:
     static_configs:
       - targets: ['timescale:5432']
 
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis:6379']
-
   - job_name: 'kafka'
     static_configs:
       - targets: ['kafka:9092'] 
