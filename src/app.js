@@ -44,11 +44,12 @@ const subscriptionsRouter = require('./routes/subscriptions');
 
 const app = express();  
 
-app.use((req, res, next) => {
-  console.log(`→ ${req.method} ${req.originalUrl}`);
-  logger.info(`→ ${req.method} ${req.originalUrl}`);
-  next(); // pass control to the next handler
-});
+// app.use((req, res, next) => {
+//   console.log("here");
+//   console.log(`→ ${req.method} ${req.originalUrl}`);
+//   logger.info(`→ ${req.method} ${req.originalUrl}`);
+//   next(); // pass control to the next handler
+// });
 app.set('redis', redis);
 
 app.use(helmet({

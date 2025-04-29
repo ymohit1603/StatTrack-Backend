@@ -2,6 +2,7 @@ const { prisma } = require('../config/db');
 const jwt = require('jsonwebtoken');
 
 async function authenticateUser(req, res, next) {
+  console.log("authenticateUser");
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -9,14 +10,16 @@ async function authenticateUser(req, res, next) {
     }
 
     const token = authHeader.split(' ')[1];
-
+    console.log("token", token);
     const apiKey = await prisma.apiKey.findUnique({
       where: { key: token },
       include: { user: true }
     });
 
     if (apiKey) {
+      console.log("apiKey", apiKey);
       req.user = apiKey.user;
+      req.user.id=apiKey.user.id;
       return next();
     }
 

@@ -69,57 +69,102 @@ const getPreviousPeriod = (start, end) => {
   const diff = end.getTime() - start.getTime();
   return {
     start: new Date(start.getTime() - diff),
-    end: new Date(end.getTime() - diff)
+    end: new Date(end.getTime() - diff),
   };
 };
 
 // Helper function to format response data
 const formatResponseData = (data) => {
+  // default arrays
+  const currentDaily = data.currentDaily || [];
+  const prevDaily = data.prevDaily || [];
+
+  // convert BigInt sums to Number
+  const totalDuration = Number(data.currentSummary?._sum?.totalDuration || 0);
+  const prevTotalDuration = Number(data.prevSummary?._sum?.totalDuration || 0);
+
+  // normalize daily entries
+  const normalizedCurrentDaily = currentDaily.map(day => ({
+    date: typeof day.date === 'string' ? day.date : day.date.toISOString().split('T')[0],
+    total_seconds: Number(day.total_seconds || 0),
+    session_count: Number(day.session_count || 0),
+  }));
+  const normalizedPrevDaily = prevDaily.map(day => ({
+    date: typeof day.date === 'string' ? day.date : day.date.toISOString().split('T')[0],
+    total_seconds: Number(day.total_seconds || 0),
+    session_count: Number(day.session_count || 0),
+  }));
+
+  const today = new Date().toISOString().split('T')[0];
+  const todayStats = normalizedCurrentDaily.find(day => day.date === today) || { total_seconds: 0, session_count: 0 };
+  const yesterdayStats = normalizedPrevDaily.find(day => day.date === today) || { total_seconds: 0, session_count: 0 };
+
+  const avgDailySeconds = normalizedCurrentDaily.length
+    ? totalDuration / normalizedCurrentDaily.length
+    : 0;
+  const prevAvgDailySeconds = normalizedPrevDaily.length
+    ? prevTotalDuration / normalizedPrevDaily.length
+    : 0;
+
+  const totalSessions = normalizedCurrentDaily.reduce((sum, day) => sum + day.session_count, 0);
+  const prevTotalSessions = normalizedPrevDaily.reduce((sum, day) => sum + day.session_count, 0);
+
   return {
     range: {
       start: data.start.toISOString(),
       end: data.end.toISOString(),
       range: data.range,
-      timezone: 'UTC'
+      timezone: 'UTC',
     },
     summary: {
-      total_seconds: data.currentSummary._sum.totalDuration || 0,
-      prev_period_seconds: data.prevSummary._sum.totalDuration || 0,
-      change_percentage: data.prevSummary._sum.totalDuration 
-        ? ((data.currentSummary._sum.totalDuration - data.prevSummary._sum.totalDuration) / data.prevSummary._sum.totalDuration) * 100 
-        : 0
+      total_seconds: totalDuration,
+      prev_period_seconds: prevTotalDuration,
+      change_percentage: prevTotalDuration
+        ? ((totalDuration - prevTotalDuration) / prevTotalDuration) * 100
+        : 0,
+      today_seconds: todayStats.total_seconds,
+      today_change_percentage: yesterdayStats.total_seconds
+        ? ((todayStats.total_seconds - yesterdayStats.total_seconds) / yesterdayStats.total_seconds) * 100
+        : 0,
+      avg_daily_seconds: avgDailySeconds,
+      avg_daily_change_percentage: prevAvgDailySeconds
+        ? ((avgDailySeconds - prevAvgDailySeconds) / prevAvgDailySeconds) * 100
+        : 0,
+      total_sessions: totalSessions,
+      sessions_change_percentage: prevTotalSessions
+        ? ((totalSessions - prevTotalSessions) / prevTotalSessions) * 100
+        : 0,
     },
-    daily_stats: data.currentDaily.map(day => ({
-      date: day.date?.toISOString().split('T')[0] || '',
-      total_seconds: Number(day.total_seconds),
-      session_count: Number(day.session_count)
-    })),
-    languages: data.currentLanguages.map(lang => ({
+    daily_stats: normalizedCurrentDaily,
+    languages: (data.currentLanguages || []).map(lang => ({
       language: lang.language,
       session_count: Number(lang.session_count),
       total_seconds: Number(lang.total_seconds),
-      percentage: Number(lang.percentage)
+      percentage: Number(lang.percentage),
     })),
-    lines_per_day: data.linesData.map(data => ({
-      date: data.startTime.toISOString().split('T')[0],
-      total_lines: data._sum.totalLines || 0
+    lines_per_day: (data.linesData || []).map(d => ({
+      date: d.startTime.toISOString().split('T')[0],
+      total_lines: Number(d._sum?.totalLines || 0),
     })),
-    recent_sessions: data.currentSessions.map(session => ({
-      start_time: session.startTime,
-      end_time: session.endTime,
-      duration: session.duration,
-      total_lines: session.totalLines,
-      languages: session.languages
+    recent_sessions: (data.currentSessions || []).map(s => ({
+      start_time: s.startTime,
+      end_time: s.endTime,
+      duration: Number(s.duration),
+      total_lines: Number(s.totalLines),
+      languages: s.languages,
     })),
-    goals: data.goals,
-    leaderboard: data.leaderboard.map(user => ({
-      id: user.id,
-      username: user.username,
-      profile_url: user.profile_url,
-      total_seconds: Number(user.total_seconds),
-      days_coded: Number(user.days_coded),
-      rank: Number(user.rank)
-    }))
+    goals: data.goals || {
+      daily_coding_time: { target: 14400, current: 0, progress: 0 },
+      weekly_coding_days: { target: 5, current: 0, progress: 0 },
+    },
+    leaderboard: (data.leaderboard || []).map(u => ({
+      id: u.id,
+      username: u.username,
+      profile_url: u.profile_url,
+      total_seconds: Number(u.total_seconds),
+      days_coded: Number(u.days_coded),
+      rank: Number(u.rank),
+    })),
   };
 };
 
@@ -205,6 +250,7 @@ router.get('/summary', authenticateUser, async (req, res) => {
   try {
     const { range = 'last_7_days' } = req.query;
     const userId = req.user.id;
+    console.log("userId", userId);
     
     // Check cache first
     const cacheKey = CACHE_KEYS.SUMMARY(userId, range);
@@ -233,22 +279,23 @@ router.get('/summary', authenticateUser, async (req, res) => {
       currentSummary, 
       prevSummary, 
       currentDaily, 
+      prevDaily,
       currentLanguages, 
       currentSessions,
       linesData,
       leaderboard
     ] = await Promise.all([
-      // Current period summary - using DailySummary instead of Heartbeat
+      // Current period summary
       prisma.dailySummary.aggregate({
         where: { userId, summaryDate: { gte: start, lte: end } },
         _sum: { totalDuration: true },
       }),
-      // Previous period summary - using DailySummary instead of Heartbeat
+      // Previous period summary
       prisma.dailySummary.aggregate({
         where: { userId, summaryDate: { gte: prevStart, lte: prevEnd } },
         _sum: { totalDuration: true },
       }),
-      // Daily stats - using DailySummary instead of Heartbeat
+      // Current period daily stats
       prisma.$queryRaw`
         SELECT DATE("summaryDate") as date, 
                SUM("totalDuration") as total_seconds,
@@ -259,9 +306,20 @@ router.get('/summary', authenticateUser, async (req, res) => {
         GROUP BY DATE("summaryDate")
         ORDER BY date ASC
       `,
-      // Language stats - using CodingSession instead of Heartbeat
+      // Previous period daily stats
+      prisma.$queryRaw`
+        SELECT DATE("summaryDate") as date, 
+               SUM("totalDuration") as total_seconds,
+               COUNT(*) as session_count
+        FROM "DailySummary"
+        WHERE "userId" = ${userId} 
+        AND "summaryDate" BETWEEN ${prevStart} AND ${prevEnd}
+        GROUP BY DATE("summaryDate")
+        ORDER BY date ASC
+      `,
+      // Language stats
       getLanguageStats(userId, start, end),
-      // Recent sessions - limit to 10 for performance
+      // Recent sessions
       prisma.codingSession.findMany({
         where: {
           userId,
@@ -277,7 +335,7 @@ router.get('/summary', authenticateUser, async (req, res) => {
           languages: true,
         }
       }),
-      // Lines per day - using CodingSession
+      // Lines per day
       prisma.codingSession.groupBy({
         by: ['startTime'],
         where: {
@@ -291,7 +349,7 @@ router.get('/summary', authenticateUser, async (req, res) => {
           startTime: 'asc'
         }
       }),
-      // Leaderboard - optimized with caching
+      // Leaderboard
       getLeaderboardData(start, end, userId)
     ]);
 
@@ -317,6 +375,7 @@ router.get('/summary', authenticateUser, async (req, res) => {
       currentSummary,
       prevSummary,
       currentDaily,
+      prevDaily,
       currentLanguages,
       currentSessions,
       linesData,
@@ -360,6 +419,7 @@ router.get('/heatmap', authenticateUser, async (req, res) => {
       start = new Date(year, 0, 1);
       end = new Date(year, 11, 31, 23, 59, 59);
     } else {
+      // Default to showing the last year of data
       end = new Date();
       start = new Date(end);
       start.setFullYear(end.getFullYear() - 1);
@@ -389,12 +449,33 @@ router.get('/heatmap', authenticateUser, async (req, res) => {
       orderBy: { summaryDate: 'asc' }
     });
 
+    // Format data for GitHub-style heatmap
     const heatmap = rows.map(r => ({
       date: r.summaryDate.toISOString().split('T')[0],
       total_seconds: Number(r.totalDuration)
     }));
     
-    const responseData = heatmap;
+    // Add empty days to ensure continuous data
+    const allDays = [];
+    const currentDate = new Date(start);
+    
+    while (currentDate <= end) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const existingDay = heatmap.find(day => day.date === dateStr);
+      
+      if (existingDay) {
+        allDays.push(existingDay);
+      } else {
+        allDays.push({
+          date: dateStr,
+          total_seconds: 0
+        });
+      }
+      
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    const responseData = allDays;
     
     // Cache the response
     cache.set(cacheKey, responseData, 3600); // Cache for 1 hour
