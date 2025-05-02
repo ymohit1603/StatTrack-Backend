@@ -72,7 +72,7 @@ function formatLeaderboardResponse(rankings, currentUser, range, language, start
             rank: Number(currentUser.rank),
             total_seconds: Number(currentUser.total_seconds),
             days_coded: Number(currentUser.days_coded),
-            running_total: Number(currentUser.total_seconds)
+            running_total: Number(currentUser.total_seconds),
           }
         : null,
       language,
@@ -82,7 +82,8 @@ function formatLeaderboardResponse(rankings, currentUser, range, language, start
         user: {
           id: Number(r.id),
           username: r.username,
-          profile_url: r.profile_url
+          profile_url: r.profile_url,
+          app_name:r.app_name
         },
         rank: Number(r.rank),
         running_total: Number(r.total_seconds),
@@ -113,6 +114,7 @@ const getLeaderboardData = async (start, end, language = null) => {
         u.id,
         u.username,
         u.profile_url,
+        u.app_name,
         SUM(ds."totalDuration") as total_seconds,
         COUNT(DISTINCT DATE(ds."summaryDate")) as days_coded,
         RANK() OVER (ORDER BY SUM(ds."totalDuration") DESC) as rank
@@ -143,6 +145,7 @@ const getLeaderboardData = async (start, end, language = null) => {
       ru.id,
       ru.username,
       ru.profile_url,
+      ru.app_name,
       ru.total_seconds,
       ru.days_coded,
       ru.rank,
