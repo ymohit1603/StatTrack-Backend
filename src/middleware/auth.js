@@ -25,10 +25,10 @@ async function authenticateUser(req, res, next) {
 
     try {
       console.log(token);
+      console.log(process.env.JWT_SECRET);
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       console.log("decoded id", decoded.userId);
       console.log('Decoded JWT Payload:', decoded);
-      console.log(process.env.JWT_SECRET);
       const user = await prisma.user.findUnique({
         where: { id: decoded.userId }
       });

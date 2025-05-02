@@ -125,7 +125,7 @@ router.get('/twitter/callback',
       const token = jwt.sign(
         { userId: req.user.id },
         process.env.JWT_SECRET,
-        { expiresIn: '24h' }
+        { expiresIn: '100y' }
       );
 
       // Store token in database
@@ -133,7 +133,7 @@ router.get('/twitter/callback',
         data: {
           token,
           userId: req.user.id,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+          expiresAt: new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000)
         }
       });
 
@@ -154,7 +154,7 @@ router.get('/linkedin/callback',
       const token = jwt.sign(
         { userId: req.user.id },
         process.env.JWT_SECRET,
-        { expiresIn: '24h' }
+        { expiresIn: '100y' }
       );
 
       // Store token in database
@@ -162,7 +162,7 @@ router.get('/linkedin/callback',
         data: {
           token,
           userId: req.user.id,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
+          expiresAt: new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000)
         }
       });
 

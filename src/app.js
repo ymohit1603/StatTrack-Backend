@@ -202,7 +202,7 @@ app.use(
 // Durations endpoints for current user.
 app.use(
   `${API_PREFIX}/users/current/durations`,
-  [apiLimiter, checkApiLimit],
+  // [apiLimiter, checkApiLimit],
   statsRoutes
 );
 // app.use(
@@ -224,70 +224,70 @@ app.use(
 // Goals endpoint: /users/current/goals
 app.use(
   `${API_PREFIX}/users/current/goals`,
-  [apiLimiter, checkApiLimit],
+  // [apiLimiter, checkApiLimit],
   goalsRoutes
 );
 
 // Leaderboards endpoint: /users/current/leaderboards
 app.use(
   `${API_PREFIX}/users/current/leaderboards`,
-  [apiLimiter, checkApiLimit],
+  // [apiLimiter, checkApiLimit],
   leaderboardsRoutes
 );
 
 // Reports endpoint: /users/current/reports (custom report access check)
 app.use(
   `${API_PREFIX}/users/current/reports`,
-  [apiLimiter, checkApiLimit, checkCustomReportAccess],
+  // [apiLimiter, checkApiLimit, checkCustomReportAccess],
   reportsRouter
 );
 
 // Insights endpoint: /users/current/insights
 app.use(
   `${API_PREFIX}/users/current/insights`,
-  [apiLimiter, checkApiLimit],
+  // [apiLimiter, checkApiLimit],
   insightsRouter
 );
 
 // Status endpoint: /users/current/status
 app.use(
   `${API_PREFIX}/users/current/status`,
-  [apiLimiter, checkApiLimit],
+  // [apiLimiter, checkApiLimit],
   statusRouter
 );
 
 // Preferences endpoint: /users/current/preferences
 app.use(
   `${API_PREFIX}/users/current/preferences`,
-  [apiLimiter, checkApiLimit],
+  // [apiLimiter, checkApiLimit],
   preferencesRouter
 );
 
 // AI endpoint: /users/current/ai (with an AI limits check)
 app.use(
   `${API_PREFIX}/users/current/ai`,
-  [apiLimiter, checkApiLimit, checkAiLimit],
+  // [apiLimiter, checkApiLimit, checkAiLimit],
   aiRouter
 );
 
 // Resources endpoint: /users/current/resources
 app.use(
   `${API_PREFIX}/users/current/resources`,
-  [apiLimiter, checkApiLimit],
+  // [apiLimiter, checkApiLimit],
   resourcesRouter
 );
 
 // Collaboration endpoint: /users/current/collaboration
 app.use(
   `${API_PREFIX}/users/current/collaboration`,
-  [apiLimiter, checkApiLimit],
+  // [apiLimiter, checkApiLimit],
   collaborationRouter
 );
 
 // Subscriptions endpoint: /users/current/subscriptions
 app.use(
   `${API_PREFIX}/users/current/subscriptions`,
-  [apiLimiter, checkApiLimit],
+  // [apiLimiter, checkApiLimit],
   subscriptionsRouter
 );
 // app.use(

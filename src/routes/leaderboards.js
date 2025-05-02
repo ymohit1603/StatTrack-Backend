@@ -1,198 +1,366 @@
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
+const { PrismaClient, Prisma } = require('@prisma/client');
 const { authenticateUser } = require('../middleware/auth');
 const logger = require('../utils/logger');
+const NodeCache = require('node-cache');
+const rateLimit = require('express-rate-limit');
+
+// Initialize cache with 5 minute TTL
+const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
+
+// Initialize rate limiter
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
 
 const prisma = new PrismaClient();
 
-// Get leaderboards
-router.get('/', authenticateUser, async (req, res) => {
-  try {
-    const { range = 'last_7_days', language = null } = req.query;
-    const end = new Date();
-    let start = new Date();
+// Cache keys
+const CACHE_KEYS = {
+  LEADERBOARD: (range, language) => `leaderboard:${range}:${language || 'all'}`,
+  AVAILABLE: 'available_options',
+  HISTORY: (userId, range, language) => `history:${userId}:${range}:${language || 'all'}`
+};
 
-    switch (range) {
-      case 'last_7_days':
-        start.setDate(start.getDate() - 7);
-        break;
-      case 'last_30_days':
-        start.setDate(start.getDate() - 30);
-        break;
-      case 'last_6_months':
-        start.setMonth(start.getMonth() - 6);
-        break;
-      case 'last_year':
-        start.setFullYear(start.getFullYear() - 1);
-        break;
-      default:
-        return res.status(400).json({ error: 'Invalid range' });
-    }
+// Helper function to calculate date range
+const getDateRange = (range) => {
+  const end = new Date();
+  const start = new Date();
 
-    // Get user rankings based on coding time
-    const rankings = await prisma.$queryRaw`
-      WITH user_stats AS (
-        SELECT 
-          u.id,
-          u.username,
-          u.profile_url,
-          SUM(h.duration) as total_seconds,
-          COUNT(DISTINCT DATE(h.timestamp)) as days_coded,
-          RANK() OVER (ORDER BY SUM(h.duration) DESC) as rank
-        FROM "User" u
-        JOIN Heartbeat h ON h.userId = u.id
-        WHERE h.timestamp BETWEEN ${start} AND ${end}
-          ${language ? prisma.sql`AND h.language = ${language}` : prisma.sql``}
-          AND u.isPrivate = false
-        GROUP BY u.id, u.username, u.profile_url
-      )
-      SELECT 
-        id,
-        username,
-        profile_url,
-        total_seconds,
-        days_coded,
-        rank,
-        CASE 
-          WHEN rank = 1 THEN 'gold'
-          WHEN rank = 2 THEN 'silver'
-          WHEN rank = 3 THEN 'bronze'
-          ELSE null
-        END as badge
-      FROM user_stats
-      ORDER BY rank ASC
-      LIMIT 100
-    `;
+  switch (range) {
+    case 'today':
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      break;
+    case 'last_7_days':
+      start.setDate(start.getDate() - 7);
+      break;
+    case 'last_30_days':
+      start.setDate(start.getDate() - 30);
+      break;
+    case 'last_6_months':
+      start.setMonth(start.getMonth() - 6);
+      break;
+    case 'last_year':
+      start.setFullYear(start.getFullYear() - 1);
+      break;
+    default:
+      throw new Error('Invalid range parameter');
+  }
 
-    // Get current user's position
-    const [currentUser] = await prisma.$queryRaw`
-      WITH user_rankings AS (
-        SELECT 
-          u.id,
-          RANK() OVER (ORDER BY SUM(h.duration) DESC) as rank,
-          SUM(h.duration) as total_seconds,
-          COUNT(DISTINCT DATE(h.timestamp)) as days_coded
-        FROM "User" u
-        JOIN Heartbeat h ON h.userId = u.id
-        WHERE h.timestamp BETWEEN ${start} AND ${end}
-          ${language ? prisma.sql`AND h.language = ${language}` : prisma.sql``}
-        GROUP BY u.id
-      )
-      SELECT * FROM user_rankings
-      WHERE id = ${req.user.id}
-    `;
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    throw new Error('Invalid date range calculated');
+  }
 
-    res.json({
-      data: {
-        range: {
-          start: start.toISOString(),
-          end: end.toISOString(),
-          range,
-          timezone: 'UTC'
+  return { start, end };
+};
+
+// Helper: format leaderboard response
+function formatLeaderboardResponse(rankings, currentUser, range, language, start, end) {
+  return {
+    data: {
+      range: {
+        start: start.toISOString(),
+        end: end.toISOString(),
+        range,
+        timezone: 'UTC'
+      },
+      current_user: currentUser
+        ? {
+            rank: Number(currentUser.rank),
+            total_seconds: Number(currentUser.total_seconds),
+            days_coded: Number(currentUser.days_coded),
+            running_total: Number(currentUser.total_seconds)
+          }
+        : null,
+      language,
+      page: 1,
+      total_pages: 1,
+      ranks: rankings.map((r) => ({
+        user: {
+          id: Number(r.id),
+          username: r.username,
+          profile_url: r.profile_url
         },
-        current_user: currentUser ? {
-          rank: currentUser.rank,
-          total_seconds: currentUser.total_seconds,
-          days_coded: currentUser.days_coded,
-          running_total: currentUser.total_seconds
-        } : null,
-        language: language,
-        page: 1,
-        total_pages: 1,
-        ranks: rankings.map(rank => ({
-          user: {
-            id: rank.id,
-            username: rank.username,
-            profile_url: rank.profile_url
-          },
-          rank: rank.rank,
-          running_total: rank.total_seconds,
-          total_seconds: rank.total_seconds,
-          days_coded: rank.days_coded,
-          badge: rank.badge
+        rank: Number(r.rank),
+        running_total: Number(r.total_seconds),
+        total_seconds: Number(r.total_seconds),
+        days_coded: Number(r.days_coded),
+        badge: r.badge,
+        languages_breakdown: (r.languages_breakdown || []).map(l => ({
+          language: l.language,
+          total_seconds: Number(l.total_seconds)
         }))
-      }
-    });
-  } catch (error) {
-    logger.error('Error fetching leaderboards:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get available leaderboard options
-router.get('/available', authenticateUser, async (req, res) => {
-  try {
-    const languages = await prisma.$queryRaw`
-      SELECT DISTINCT language
-      FROM Heartbeat
-      WHERE language IS NOT NULL
-      ORDER BY language ASC
-    `;
-
-    res.json({
-      data: {
-        ranges: ['last_7_days', 'last_30_days', 'last_6_months', 'last_year'],
-        languages: languages.map(l => l.language)
-      }
-    });
-  } catch (error) {
-    logger.error('Error fetching leaderboard options:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Get user's leaderboard history
-router.get('/history', authenticateUser, async (req, res) => {
-  try {
-    const { range = 'last_7_days', language = null } = req.query;
-    const end = new Date();
-    let start = new Date();
-
-    switch (range) {
-      case 'last_7_days':
-        start.setDate(start.getDate() - 7);
-        break;
-      case 'last_30_days':
-        start.setDate(start.getDate() - 30);
-        break;
-      default:
-        return res.status(400).json({ error: 'Invalid range' });
+      }))
     }
+  };
+}
+
+// Optimized query to fetch leaderboard data with per-language breakdown
+const getLeaderboardData = async (start, end, language = null) => {
+  const langFilterOverall = language
+    ? Prisma.sql`AND cs.languages @> ARRAY[${language}]::text[]`
+    : Prisma.empty;
+  const langFilterBreakdown = language
+    ? Prisma.sql`AND lang = ${language}`
+    : Prisma.empty;
+
+  return prisma.$queryRaw`
+    WITH RankedUsers AS (
+      SELECT 
+        u.id,
+        u.username,
+        u.profile_url,
+        SUM(ds."totalDuration") as total_seconds,
+        COUNT(DISTINCT DATE(ds."summaryDate")) as days_coded,
+        RANK() OVER (ORDER BY SUM(ds."totalDuration") DESC) as rank
+      FROM "User" u
+      JOIN "DailySummary" ds ON u.id = ds."userId"
+      JOIN "CodingSession" cs ON u.id = cs."userId" AND DATE(cs."startTime") = DATE(ds."summaryDate")
+      WHERE ds."summaryDate" BETWEEN ${start} AND ${end}
+        AND u."isPrivate" = false
+        ${langFilterOverall}
+      GROUP BY u.id, u.username, u.profile_url
+      HAVING SUM(ds."totalDuration") > 0
+    ),
+    LangTotals AS (
+      SELECT
+        u.id AS user_id,
+        lang AS language,
+        SUM(ds."totalDuration") AS total_seconds
+      FROM "User" u
+      JOIN "DailySummary" ds ON u.id = ds."userId"
+      JOIN "CodingSession" cs ON u.id = cs."userId" AND DATE(cs."startTime") = DATE(ds."summaryDate")
+      CROSS JOIN UNNEST(cs.languages) AS lang
+      WHERE ds."summaryDate" BETWEEN ${start} AND ${end}
+        AND u."isPrivate" = false
+        ${langFilterBreakdown}
+      GROUP BY u.id, lang
+    )
+    SELECT 
+      ru.id,
+      ru.username,
+      ru.profile_url,
+      ru.total_seconds,
+      ru.days_coded,
+      ru.rank,
+      CASE 
+        WHEN ru.rank = 1 THEN 'gold'
+        WHEN ru.rank = 2 THEN 'silver'
+        WHEN ru.rank = 3 THEN 'bronze'
+        ELSE NULL
+      END AS badge,
+      (
+        SELECT json_agg(json_build_object('language', lt.language, 'total_seconds', lt.total_seconds))
+        FROM LangTotals lt
+        WHERE lt.user_id = ru.id
+      ) AS languages_breakdown
+    FROM RankedUsers ru
+    ORDER BY ru.rank
+    LIMIT 100;
+  `;
+};
+
+// Optimized query to fetch current user's ranking
+const getCurrentUserRanking = async (userId, start, end, language = null) => {
+  const langFilter = language ? Prisma.sql`AND cs.languages @> ARRAY[${language}]::text[]` : Prisma.empty;
+
+  const [ranking] = await prisma.$queryRaw`
+    WITH RankedUsers AS (
+      SELECT 
+        u.id,
+        RANK() OVER (ORDER BY SUM(ds."totalDuration") DESC) as rank,
+        SUM(ds."totalDuration") as total_seconds,
+        COUNT(DISTINCT DATE(ds."summaryDate")) as days_coded
+      FROM "User" u
+      JOIN "DailySummary" ds ON u.id = ds."userId"
+      JOIN "CodingSession" cs ON u.id = cs."userId" AND DATE(cs."startTime") = DATE(ds."summaryDate")
+      WHERE ds."summaryDate" BETWEEN ${start} AND ${end}
+        ${langFilter}
+      GROUP BY u.id
+      HAVING SUM(ds."totalDuration") > 0
+    )
+    SELECT id, rank, total_seconds, days_coded
+    FROM RankedUsers
+    WHERE id = ${userId};
+  `;
+
+  return ranking;
+};
+
+/** GET /leaderboards */
+router.get('/', authenticateUser, limiter, async (req, res) => {
+  try {
+    const range = req.query.range || 'last_7_days';
+
+    // Normalize the language param so that "null"/""/"all" mean no filter
+    let { language: rawLang } = req.query;
+    if (rawLang === 'null' || rawLang === '' || rawLang === 'all') {
+      rawLang = null;
+    }
+    const language = rawLang;
+
+    const cacheKey = CACHE_KEYS.LEADERBOARD(range, language);
+
+    // Check cache first
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      logger.info(`Cache hit ${cacheKey}`);
+      return res.json(cached);
+    }
+    logger.info(`Cache miss ${cacheKey}`);
+
+    // Calculate date range
+    const { start, end } = getDateRange(range);
+
+    // Fetch leaderboard data and current user ranking in parallel
+    const [rankings, currentUser] = await Promise.all([
+      getLeaderboardData(start, end, language),
+      getCurrentUserRanking(req.user.id, start, end, language)
+    ]);
+
+    const response = formatLeaderboardResponse(rankings, currentUser, range, language, start, end);
+
+    // Cache the response
+    cache.set(cacheKey, response, 300); // Cache for 5 minutes
+
+    res.json(response);
+  } catch (err) {
+    logger.error('Error fetching leaderboards:', err);
+    if (err.message.includes('Invalid range parameter') || err.message.includes('Invalid date range calculated')) {
+      return res.status(400).json({ error: err.message });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/** GET /leaderboards/available */
+router.get('/available', authenticateUser, limiter, async (req, res) => {
+  try {
+    const cacheKey = CACHE_KEYS.AVAILABLE;
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      logger.info(`Cache hit ${cacheKey}`);
+      return res.json(cached);
+    }
+
+    // Get unique languages from coding sessions
+    const sessions = await prisma.codingSession.findMany({
+      select: { languages: true },
+      distinct: ['languages']
+    });
+
+    // Flatten and get unique languages
+    const uniqueLanguages = [...new Set(sessions.flatMap(s => s.languages))].sort();
+
+    const response = {
+      data: {
+        ranges: ['today', 'last_7_days', 'last_30_days', 'last_6_months', 'last_year'],
+        languages: uniqueLanguages
+      }
+    };
+
+    // Cache for 1 hour since this data changes less frequently
+    cache.set(cacheKey, response, 3600);
+    res.json(response);
+  } catch (err) {
+    logger.error('Error fetching available options:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+/** GET /leaderboards/history */
+router.get('/history', authenticateUser, limiter, async (req, res) => {
+  try {
+    const range = req.query.range || 'last_7_days';
+
+    let { language: rawLang } = req.query;
+    if (rawLang === 'null' || rawLang === '' || rawLang === 'all') {
+      rawLang = null;
+    }
+    const language = rawLang;
+
+    const cacheKey = CACHE_KEYS.HISTORY(req.user.id, range, language);
+    const cached = cache.get(cacheKey);
+    if (cached) {
+      logger.info(`Cache hit ${cacheKey}`);
+      return res.json(cached);
+    }
+
+    const { start, end } = getDateRange(range);
+    const langFilter = language ? Prisma.sql`AND ds."language" = ${language}` : Prisma.empty;
 
     const history = await prisma.$queryRaw`
       WITH daily_ranks AS (
         SELECT 
-          DATE(h.timestamp) as date,
-          u.id as user_id,
-          SUM(h.duration) as daily_total,
-          RANK() OVER (PARTITION BY DATE(h.timestamp) ORDER BY SUM(h.duration) DESC) as rank
+          DATE(ds."summaryDate") AS date,
+          u.id AS user_id,
+          SUM(ds."totalDuration") as total_seconds,
+          RANK() OVER (PARTITION BY DATE(ds."summaryDate") ORDER BY SUM(ds."totalDuration") DESC) AS rank
         FROM "User" u
-        JOIN Heartbeat h ON h.userId = u.id
-        WHERE h.timestamp BETWEEN ${start} AND ${end}
-          ${language ? prisma.sql`AND h.language = ${language}` : prisma.sql``}
-        GROUP BY DATE(h.timestamp), u.id
+        JOIN "DailySummary" ds ON u.id = ds."userId"
+        WHERE ds."summaryDate" BETWEEN ${start} AND ${end}
+          ${langFilter}
+        GROUP BY DATE(ds."summaryDate"), u.id
+        HAVING SUM(ds."totalDuration") > 0
       )
-      SELECT 
-        date,
-        rank,
-        daily_total as total_seconds
+      SELECT date, rank, total_seconds
       FROM daily_ranks
       WHERE user_id = ${req.user.id}
-      ORDER BY date ASC
+      ORDER BY date ASC;
     `;
 
-    res.json({
-      data: history.map(day => ({
-        date: day.date.toISOString().split('T')[0],
-        rank: day.rank,
-        total_seconds: day.total_seconds
+    const response = {
+      data: history.map((d) => ({
+        date: d.date.toISOString().split('T')[0],
+        rank: Number(d.rank),
+        total_seconds: Number(d.total_seconds)
       }))
-    });
-  } catch (error) {
-    logger.error('Error fetching leaderboard history:', error);
+    };
+
+    // Cache for 5 minutes
+    cache.set(cacheKey, response, 300);
+    res.json(response);
+  } catch (err) {
+    logger.error('Error fetching history:', err);
+    if (err.message.includes('Invalid range parameter') || err.message.includes('Invalid date range calculated')) {
+      return res.status(400).json({ error: err.message });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-module.exports = router; 
+/** POST /leaderboards/clear-cache */
+router.post('/clear-cache', authenticateUser, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const { type, range, language } = req.body;
+    switch (type) {
+      case 'leaderboard':
+        cache.del(CACHE_KEYS.LEADERBOARD(range, language));
+        break;
+      case 'available':
+        cache.del(CACHE_KEYS.AVAILABLE);
+        break;
+      case 'history':
+        cache.del(CACHE_KEYS.HISTORY(req.user.id, range, language));
+        break;
+      case 'all':
+        cache.flushAll();
+        break;
+      default:
+        return res.status(400).json({ error: 'Invalid type' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    logger.error('Error clearing cache:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+module.exports = router;
