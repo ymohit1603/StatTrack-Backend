@@ -4,16 +4,26 @@ const { PrismaClient } = require('@prisma/client');
 const { authenticateUser } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const {getSummaries} = require('../workers/summaryWorker')
+const { getTownhallForUser } = require('../utils/townhall');
 
 const prisma = new PrismaClient();
 
 // Get current user
 router.get('/current', authenticateUser, async (req, res) => {
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
+    const [user, townhall] = await Promise.all([
+      prisma.user.findUnique({
+        where: { id: req.user.id },
+      }),
+      getTownhallForUser(req.user.id)
+    ]);
+
+    res.json({ 
+      data: {
+        ...user,
+        townhall
+      }
     });
-    res.json({ data: user });
   } catch (error) {
     logger.error('Error fetching user:', error);
     res.status(500).json({ error: 'Internal server error' });
