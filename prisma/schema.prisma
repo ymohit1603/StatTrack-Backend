@@ -149,6 +149,7 @@ model Project {
   urlencoded_name                   String
   created_at                        DateTime @default(now())
   updated_at                        DateTime @updatedAt
+  codingSessions                    CodingSession[]
 
   @@unique([userId, name]) // Project names should be unique per user
 }
@@ -177,38 +178,41 @@ model Heartbeat {
   updated_at         DateTime @updatedAt
 
   @@index([userId, created_at])
+  @@index([time])
+  @@index([language])
 }
 
 model CodingSession {
-  id        Int      @id @default(autoincrement())
-  user      User     @relation(fields: [userId], references: [id])
-  userId    Int
-  projectId Int? // Optional project reference
-  startTime DateTime // ISO start time of session
-  endTime   DateTime // ISO end time of session
-  duration  Int // Duration in seconds (WakaTime uses float but we round here)
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  projectId   Int?
+  startTime   DateTime
+  endTime     DateTime
+  duration    Int
+  branch      String?
+  languages   String[]
+  totalLines  Int      @default(0)
+  user        User     @relation(fields: [userId], references: [id])
+  project     Project? @relation(fields: [projectId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  branch    String? // Optional: e.g., "main", "dev"
-  languages String[] // Optional: e.g., "JavaScript"
-
-  totalLines Int?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId, startTime]) // For efficient querying per user/date
+  @@index([userId, startTime])
+  @@index([startTime])
+  @@index([languages])
 }
 
 model DailySummary {
   id            Int      @id @default(autoincrement())
-  user          User     @relation(fields: [userId], references: [id])
   userId        Int
-  projectId     Int?
   summaryDate   DateTime
-  totalDuration Decimal  @db.Decimal(10, 2)
-  totalEvents   Int
+  totalDuration Int
+  user          User     @relation(fields: [userId], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  @@unique([userId, projectId, summaryDate]) // Avoid duplicate summaries
+  @@index([userId, summaryDate])
+  @@index([summaryDate])
 }
 
 model Token {

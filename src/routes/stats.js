@@ -4,6 +4,7 @@ const { authenticateUser } = require('../middleware/auth');
 const logger = require('../utils/logger');
 const { prisma } = require('../config/db');
 const NodeCache = require('node-cache');
+const compression = require('compression');
 
 // Initialize cache with 5 minute TTL
 const cache = new NodeCache({ stdTTL: 300, checkperiod: 60 });
@@ -13,6 +14,16 @@ const CACHE_KEYS = {
   SUMMARY: (userId, range) => `summary:${userId}:${range}`,
   HEATMAP: (userId, year) => `heatmap:${userId}:${year}`,
   LEADERBOARD: (range) => `leaderboard:${range}`,
+  USER_PROFILE: (userId) => `user:${userId}`,
+};
+
+// Cache invalidation helper
+const invalidateCache = (userId) => {
+  const keys = cache.keys();
+  const userKeys = keys.filter(key => key.includes(`:${userId}:`));
+  if (userKeys.length) {
+    cache.del(userKeys);
+  }
 };
 
 // Helper function to calculate date ranges
@@ -170,57 +181,79 @@ const formatResponseData = (data) => {
 
 // Optimized query to fetch user data with caching
 const getUserData = async (userId) => {
-  const cacheKey = `user:${userId}`;
-  const cachedUser = cache.get(cacheKey);
+  const cacheKey = CACHE_KEYS.USER_PROFILE(userId);
   
-  if (cachedUser) {
-    return cachedUser;
+  try {
+    // Check cache first
+    const cachedUser = cache.get(cacheKey);
+    if (cachedUser) {
+      return cachedUser;
+    }
+    
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { 
+        id: true,
+        username: true,
+        email: true,
+        createdAt: true,
+        profile_url: true,
+        preferences: true
+      }
+    });
+    
+    if (user) {
+      cache.set(cacheKey, user, 3600); // Cache for 1 hour
+    }
+    
+    return user;
+  } catch (error) {
+    logger.error('Error fetching user data:', error);
+    throw error;
   }
-  
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { createdAt: true }
-  });
-  
-  if (user) {
-    cache.set(cacheKey, user, 3600); // Cache for 1 hour
-  }
-  
-  return user;
 };
 
 // Optimized query to fetch leaderboard data with caching
-const getLeaderboardData = async (start, end, userId) => {
+const getLeaderboardData = async (start, end, userId, page = 1, limit = 10) => {
   const rangeKey = `${start.toISOString()}:${end.toISOString()}`;
-  const cacheKey = CACHE_KEYS.LEADERBOARD(rangeKey);
-  const cachedLeaderboard = cache.get(cacheKey);
+  const cacheKey = `${CACHE_KEYS.LEADERBOARD(rangeKey)}:${page}:${limit}`;
   
-  if (cachedLeaderboard) {
-    return cachedLeaderboard;
+  try {
+    // Check cache first
+    const cachedLeaderboard = cache.get(cacheKey);
+    if (cachedLeaderboard) {
+      return cachedLeaderboard;
+    }
+    
+    const offset = (page - 1) * limit;
+    
+    const leaderboard = await prisma.$queryRaw`
+      WITH RankedUsers AS (
+        SELECT 
+          u."id",
+          u."username",
+          u."profile_url",
+          SUM(ds."totalDuration") as total_seconds,
+          COUNT(DISTINCT DATE(ds."summaryDate")) as days_coded,
+          RANK() OVER (ORDER BY SUM(ds."totalDuration") DESC) as rank
+        FROM "User" u
+        LEFT JOIN "DailySummary" ds ON u."id" = ds."userId"
+        WHERE ds."summaryDate" BETWEEN ${start} AND ${end}
+        GROUP BY u."id", u."username", u."profile_url"
+      )
+      SELECT *
+      FROM RankedUsers
+      WHERE "id" = ${userId}
+      OR rank BETWEEN ${offset + 1} AND ${offset + limit}
+      ORDER BY rank ASC
+    `;
+    
+    cache.set(cacheKey, leaderboard, 300); // Cache for 5 minutes
+    return leaderboard;
+  } catch (error) {
+    logger.error('Error fetching leaderboard data:', error);
+    throw error;
   }
-  
-  const leaderboard = await prisma.$queryRaw`
-    WITH RankedUsers AS (
-      SELECT 
-        u."id",
-        u."username",
-        u."profile_url",
-        SUM(ds."totalDuration") as total_seconds,
-        COUNT(DISTINCT DATE(ds."summaryDate")) as days_coded,
-        RANK() OVER (ORDER BY SUM(ds."totalDuration") DESC) as rank
-      FROM "User" u
-      LEFT JOIN "DailySummary" ds ON u."id" = ds."userId"
-      WHERE ds."summaryDate" BETWEEN ${start} AND ${end}
-      GROUP BY u."id", u."username", u."profile_url"
-    )
-    SELECT *
-    FROM RankedUsers
-    WHERE "id" = ${userId}
-    OR rank <= 10
-  `;
-  
-  cache.set(cacheKey, leaderboard, 300); // Cache for 5 minutes
-  return leaderboard;
 };
 
 // Optimized query to fetch language stats using CodingSession instead of Heartbeat
@@ -246,161 +279,53 @@ const getLanguageStats = async (userId, start, end) => {
   `;
 };
 
+// Add compression middleware
+router.use(compression());
+
+// Optimized stats endpoint
 router.get('/summary', authenticateUser, async (req, res) => {
+  const cacheKey = CACHE_KEYS.SUMMARY(req.user.id, req.query.range);
+  
   try {
-    const { range = 'last_7_days' } = req.query;
-    const userId = req.user.id;
-    console.log("userId", userId);
-    
     // Check cache first
-    const cacheKey = CACHE_KEYS.SUMMARY(userId, range);
     const cachedData = cache.get(cacheKey);
-    
     if (cachedData) {
-      logger.info(`Cache hit for summary: ${cacheKey}`);
+      res.set('Cache-Control', 'public, max-age=300');
       return res.json(cachedData);
     }
+
+    // Get date range
+    const { start, end } = getDateRange(req.query.range, req.user.createdAt);
     
-    logger.info(`Cache miss for summary: ${cacheKey}`);
-
-    // Get user creation date with caching
-    const user = await getUserData(userId);
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Calculate date ranges
-    const { start, end } = getDateRange(range, user.createdAt);
-    const { start: prevStart, end: prevEnd } = getPreviousPeriod(start, end);
-
-    // Fetch all data in parallel with optimized queries
-    const [
-      currentSummary, 
-      prevSummary, 
-      currentDaily, 
-      prevDaily,
-      currentLanguages, 
-      currentSessions,
-      linesData,
-      leaderboard
-    ] = await Promise.all([
-      // Current period summary
-      prisma.dailySummary.aggregate({
-        where: { userId, summaryDate: { gte: start, lte: end } },
-        _sum: { totalDuration: true },
-      }),
-      // Previous period summary
-      prisma.dailySummary.aggregate({
-        where: { userId, summaryDate: { gte: prevStart, lte: prevEnd } },
-        _sum: { totalDuration: true },
-      }),
-      // Current period daily stats
-      prisma.$queryRaw`
-        SELECT DATE("summaryDate") as date, 
-               SUM("totalDuration") as total_seconds,
-               COUNT(*) as session_count
-        FROM "DailySummary"
-        WHERE "userId" = ${userId} 
-        AND "summaryDate" BETWEEN ${start} AND ${end}
-        GROUP BY DATE("summaryDate")
-        ORDER BY date ASC
-      `,
-      // Previous period daily stats
-      prisma.$queryRaw`
-        SELECT DATE("summaryDate") as date, 
-               SUM("totalDuration") as total_seconds,
-               COUNT(*) as session_count
-        FROM "DailySummary"
-        WHERE "userId" = ${userId} 
-        AND "summaryDate" BETWEEN ${prevStart} AND ${prevEnd}
-        GROUP BY DATE("summaryDate")
-        ORDER BY date ASC
-      `,
-      // Language stats
-      getLanguageStats(userId, start, end),
-      // Recent sessions
-      prisma.codingSession.findMany({
-        where: {
-          userId,
-          startTime: { gte: start, lte: end }
-        },
-        orderBy: { startTime: 'desc' },
-        take: 10,
-        select: {
-          startTime: true,
-          endTime: true,
-          duration: true,
-          totalLines: true,
-          languages: true,
-        }
-      }),
-      // Lines per day
-      prisma.codingSession.groupBy({
-        by: ['startTime'],
-        where: {
-          userId,
-          startTime: { gte: start, lte: end }
-        },
-        _sum: {
-          totalLines: true
-        },
-        orderBy: {
-          startTime: 'asc'
-        }
-      }),
-      // Leaderboard
-      getLeaderboardData(start, end, userId)
+    // Fetch data in parallel
+    const [userData, leaderboardData, languageStats] = await Promise.all([
+      getUserData(req.user.id),
+      getLeaderboardData(start, end, req.user.id),
+      getLanguageStats(req.user.id, start, end)
     ]);
-
-    // Calculate goals
-    const goals = {
-      daily_coding_time: {
-        target: 14400,
-        current: currentSummary._sum.totalDuration || 0,
-        progress: ((currentSummary._sum.totalDuration || 0) / 14400) * 100
-      },
-      weekly_coding_days: {
-        target: 5,
-        current: currentDaily.length,
-        progress: (currentDaily.length / 5) * 100
-      }
-    };
 
     // Format response data
     const responseData = formatResponseData({
+      userData,
+      leaderboardData,
+      languageStats,
       start,
       end,
-      range,
-      currentSummary,
-      prevSummary,
-      currentDaily,
-      prevDaily,
-      currentLanguages,
-      currentSessions,
-      linesData,
-      goals,
-      leaderboard
+      range: req.query.range
     });
-    
-    // Cache the response
-    cache.set(cacheKey, responseData, 300); // Cache for 5 minutes
-    
-    return res.json(responseData);
 
+    // Cache the result
+    cache.set(cacheKey, responseData, 300);
+    
+    // Set cache headers
+    res.set('Cache-Control', 'public, max-age=300');
+    res.json(responseData);
   } catch (error) {
-    logger.error('Error fetching summary:', error);
-    
-    // Provide more specific error messages
-    if (error.message === 'Invalid range parameter') {
-      return res.status(400).json({ error: 'Invalid range parameter' });
-    }
-    
-    if (error.message === 'Invalid date range calculated') {
-      return res.status(400).json({ error: 'Invalid date range calculated' });
-    }
-    
-    return res.status(500).json({ error: 'Internal server error' });
+    logger.error('Stats fetch error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
