@@ -12,6 +12,7 @@ const url = require('url');
 const { redis } = require('./config/db');
 // const { authenticateUser } = require('./middleware/auth');
 const { errorHandler } = require('./middleware/errorHandler');
+const requestLogger = require('./middleware/requestLogger');
 const logger = require('./utils/logger');
 const {
   checkProjectLimit,
@@ -44,12 +45,9 @@ const subscriptionsRouter = require('./routes/subscriptions');
 
 const app = express();  
 
-// app.use((req, res, next) => {
-//   console.log("here");
-//   console.log(`→ ${req.method} ${req.originalUrl}`);
-//   logger.info(`→ ${req.method} ${req.originalUrl}`);
-//   next(); // pass control to the next handler
-// });
+// Add request logger middleware first
+// app.use(requestLogger);
+
 app.set('redis', redis);
 
 app.use(helmet({
