@@ -6,11 +6,41 @@ const logger = require('../utils/logger');
 const { processHeartbeats } = require('../workers/heartbeatWorker');
 const { checkApiLimit, checkStorageLimit } = require('../middleware/tierLimits');
 const os = require('os');
-
+const { validateSessionKey } = require('../utils/session');
+const NodeCache = require('node-cache');
+const sessionKeyCache = new NodeCache({ stdTTL: 3600 }); 
 // Create Heartbeat(s)
 router.post('/', async (req, res) => {
-  console.log("req",req.body);
-  console.log("req.user",req.user);
+  // console.log("req",req.body);
+  const baseEncodedsessionKey = req.headers.authorization.split(' ')[1];
+  const buffer = Buffer.from(baseEncodedsessionKey, 'base64');
+const sessionKey = buffer.toString('utf-8');
+  console.log("sessionKey",sessionKey);
+
+  let userId = sessionKeyCache.get(sessionKey);
+  console.log("userId",userId);
+  if (!userId) {
+    // Validate session key and get userId
+    userId = validateSessionKey(sessionKey);
+
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    // Cache the validated session key
+    sessionKeyCache.set(sessionKey, userId);
+    
+  }
+  req.body[0].userId = userId ;
+  console.log("req.body",req.body);
+
+
+  
+   
+   
+
+
+
+ 
   try {
     let Heartbeats = Array.isArray(req.body) ? req.body : [req.body];
     
@@ -40,12 +70,12 @@ router.post('/', async (req, res) => {
     // }
 
     // Process Heartbeats directly
-    const processedCount = await processHeartbeats(req);
 
-    res.json({
-      status: 'success',
-      message: `Processed ${processedCount} Heartbeats`
-    });
+    const result = await processHeartbeats(req.body);
+    console.log("Processing complete, returning response");
+    console.log("result",result);
+    // Send response in the specified format
+    return result;
   } catch (error) {
     logger.error('Error processing Heartbeats:', error);
     res.status(500).json({ error: 'Error processing Heartbeats' });
