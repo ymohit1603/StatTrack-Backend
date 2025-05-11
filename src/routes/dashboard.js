@@ -38,6 +38,7 @@ router.get('/', [authenticateUser, checkHistoryAccess], async (req, res) => {
         start.setDate(start.getDate() - 7); // Default to last 7 days
     }
 
+    console.log("getting from heartbeat");
     // Get data directly from database
     const data = await prisma.heartbeat.groupBy({
       by: ['date'],
