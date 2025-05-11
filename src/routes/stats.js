@@ -261,7 +261,7 @@ const getLanguageStats = async (userId, start, end) => {
   // Use CodingSession instead of Heartbeat for better performance
   return prisma.$queryRaw`
     WITH TotalDuration AS (
-      SELECT SUM("duration") as total
+      SELECT COALESCE(SUM("duration"), 0) as total
       FROM "CodingSession"
       WHERE "userId" = ${userId} AND "startTime" BETWEEN ${start} AND ${end}
     )
@@ -269,7 +269,10 @@ const getLanguageStats = async (userId, start, end) => {
       unnest("languages") as language, 
       COUNT(*) as session_count,
       SUM("duration") as total_seconds,
-      ROUND(SUM("duration") * 100.0 / (SELECT total FROM TotalDuration), 2) as percentage
+      CASE 
+        WHEN (SELECT total FROM TotalDuration) = 0 THEN 0
+        ELSE ROUND(SUM("duration") * 100.0 / (SELECT total FROM TotalDuration), 2)
+      END as percentage
     FROM "CodingSession"
     WHERE "userId" = ${userId} 
     AND "startTime" BETWEEN ${start} AND ${end}
